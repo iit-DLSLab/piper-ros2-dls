@@ -42,19 +42,46 @@ class PiperHALNode(Node):
     def get_arm_trajectory_generator_callback(self, msg):
         
         print("TODO: implement trajectory generator callback")
+        desired_arm_joints_position = np.array(msg.desired_arm_joints_position) 
+        desired_arm_joints_velocity = np.array(msg.desired_arm_joints_velocity)
+
+        kp = np.array(msg.arm_kp)
+        kd = np.array(msg.arm_kd)
+
+        # arm control
+        for i in range(6):
+           self.piper.JointMitCtrl(i,
+                                    desired_arm_joints_position[i],
+                                    desired_arm_joints_velocity[i], 
+                                    kp[i],kd[i],
+                                    self.desired_arm_joints_torque[i])
+
+        # gripper control #TODO
 
 
     def get_arm_control_signal_callback(self, msg):
 
-        print("TODO: implement arm control signal callback")
+        self.desired_arm_joints_torque = np.array(msg.desired_arm_joints_torque)
+        self.desired_gripper_torque = msg.desired_arm_gripper_torque
 
 
     def compute_piper_hal_callback(self):
         print("TODO: implement piper hal callback")
 
-        print(self.piper.GetArmJointMsgs())
-        print(piper.GetArmGripperMsgs())
+        joints_msg = self.piper.GetArmJointMsgs()
+        
+        gripper_msg = self.piper.GetArmGripperMsgs()
+        
+        # publish arm state #TODO
+        #arm_state_msg = ArmState()
+        #arm_state_msg.joint_positions = joints_msg.position
+        #arm_state_msg.joint_velocities = joints_msg.velocity
+        #arm_state_msg.joint_torques = joints_msg.torque
+        #arm_state_msg.gripper_position = gripper_msg.position
+        #arm_state_msg.gripper_velocity = gripper_msg.velocity
+        #arm_state_msg.gripper_torque = gripper_msg.torque
 
+        self.publisher_arm_blind_state.publish(arm_state_msg)
 
 #---------------------------
 if __name__ == '__main__':
