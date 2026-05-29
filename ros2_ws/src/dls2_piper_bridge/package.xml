@@ -2,9 +2,9 @@
 <package format="3">
   <name>dls2_piper_bridge</name>
   <version>0.0.0</version>
-  <description>ROS2 Python package providing Piper HAL node</description>
+  <description>ROS2 Python package providing Piper HAL node for DLS 2</description>
   <maintainer email="giulioturrisi@example.com">Giulio Turrisi</maintainer>
-  <license>Apache-2.0</license>
+  <license>MIT</license>
 
   <buildtool_depend>python3-setuptools</buildtool_depend>
 
