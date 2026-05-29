@@ -8,9 +8,14 @@
 
   <buildtool_depend>python3-setuptools</buildtool_depend>
 
+  <exec_depend>ament_index_python</exec_depend>
   <depend>rclpy</depend>
   <depend>dls2_interface</depend>
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+  <exec_depend>plotjuggler</exec_depend>
   <exec_depend>piper_sdk</exec_depend>
+  <exec_depend>ros2launch</exec_depend>
 
   <exec_depend>python3</exec_depend>
   <exec_depend>python3-numpy</exec_depend>
