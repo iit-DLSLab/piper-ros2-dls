@@ -67,16 +67,6 @@ def generate_launch_description():
         ],
     )
 
-    ros2_control_node = Node(
-        package="controller_manager",
-        executable="ros2_control_node",
-        parameters=[
-            {"robot_description": robot_description},
-            {"update_rate": 200},
-        ],
-        output="screen",
-    )
-
     joint_state_publisher_gui_node = Node(
         package="joint_state_publisher_gui",
         executable="joint_state_publisher_gui",
@@ -93,7 +83,6 @@ def generate_launch_description():
     return LaunchDescription(
         declared_arguments
         + [
-            ros2_control_node,
             joint_state_publisher_gui_node,
             robot_state_publisher_node,
             rviz_node,
