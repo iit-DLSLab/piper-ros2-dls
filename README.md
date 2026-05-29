@@ -1,7 +1,6 @@
 ## Overview
 
-A wrapper around the `piper_sdk` repository that provides a script
-for communicating with DLS controllers.
+A wrapper around the `piper_sdk` repository that provides a script for communicating with DLS controllers.
 
 ## Prerequisites
 
@@ -21,8 +20,8 @@ cd piper-ros2-dls
 
 ## Python environment (uv)
 
-This project includes instructions using the `uv` manager. Adapt these
-commands to your environment if you prefer `venv`, `pipenv`, or `conda`.
+This project includes instructions using the `uv` manager.
+Adapt these commands to your environment if you prefer `venv`, `pipenv`, or `conda`.
 
 Create an environment and activate it:
 
@@ -31,8 +30,7 @@ uv venv
 source .venv/bin/activate
 ```
 
-Install the `piper_sdk` package in editable mode and other Python
-dependencies:
+Install the `piper_sdk` package in editable mode and other Python dependencies:
 
 ```bash
 uv pip install -e ./piper_sdk
