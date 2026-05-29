@@ -1,0 +1,27 @@
+moveit_setup_assistant_config:
+  urdf:
+    package: dls_resources_piper_description
+    relative_path: urdf/piper_description.xacro
+  srdf:
+    relative_path: config/piper.srdf
+  package_settings:
+    author_name: Antonio Langella
+    author_email: antonio.langella@iit.it
+    generated_timestamp: 1780069149
+  control_xacro:
+    command:
+      - position
+      - velocity
+    state:
+      - position
+      - velocity
+  modified_urdf:
+    xacros:
+      - control_xacro
+  control_xacro:
+    command:
+      - position
+      - velocity
+    state:
+      - position
+      - velocity
