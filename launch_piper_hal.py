@@ -9,6 +9,7 @@ submodule_path = dir_path + "/ros2_ws/install"
 print("submodule_path:", submodule_path)
 if not os.path.exists(submodule_path):
     print("Build the msg by hand first!!")
+    print("cd ros2_ws && colcon build && cd ..")
 else:
     print("\n\n")
     print("msg already built - if you have any modifications, please delete the build folder in the submodule")
