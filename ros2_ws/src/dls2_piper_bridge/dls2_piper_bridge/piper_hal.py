@@ -1,5 +1,5 @@
-import rclpy 
-from rclpy.node import Node 
+import rclpy
+from rclpy.node import Node
 from dls2_interface.msg import ArmState, ArmTrajectoryGenerator, ArmControlSignal
 
 import numpy as np
@@ -12,11 +12,13 @@ class PiperHALNode(Node):
     def __init__(self):
         super().__init__('Piper_HAL_Node')
 
-        arm_state_freq = 300  # Hz 
+        arm_state_freq = 300  # Hz
         self.timer = self.create_timer(1/arm_state_freq, self.compute_piper_hal_callback)
-        self.publisher_arm_blind_state = self.create_publisher(ArmState,"/arm_state", 1)
-        self.subscriber_trajectory_generator_arm = self.create_subscription(ArmTrajectoryGenerator,"/arm_trajectory_generator", self.get_arm_trajectory_generator_callback, 1)
-        self.subscriber_arm_control_signal = self.create_subscription(ArmControlSignal,"/arm_control_signal", self.get_arm_control_signal_callback, 1)
+        self.publisher_arm_blind_state = self.create_publisher(ArmState, "/arm_state", 1)
+        self.subscriber_trajectory_generator_arm = self.create_subscription(
+            ArmTrajectoryGenerator, "/arm_trajectory_generator", self.get_arm_trajectory_generator_callback, 1)
+        self.subscriber_arm_control_signal = self.create_subscription(
+            ArmControlSignal, "/arm_control_signal", self.get_arm_control_signal_callback, 1)
 
         # Initialize control signal variables
         self.desired_arm_joints_torque = np.zeros(6)
@@ -32,16 +34,15 @@ class PiperHALNode(Node):
         np.set_printoptions(precision=3, suppress=True)
         self.piper = C_PiperInterface_V2("can0")
         self.piper.ConnectPort()
-        while( not self.piper.EnablePiper()):
+        while not self.piper.EnablePiper():
             print("Enabling Piper...")
             time.sleep(0.01)
         print("Piper Enabled.")
 
 
     def get_arm_trajectory_generator_callback(self, msg):
-        
         print("TODO: implement trajectory generator callback")
-        desired_arm_joints_position = np.array(msg.desired_arm_joints_position) 
+        desired_arm_joints_position = np.array(msg.desired_arm_joints_position)
         desired_arm_joints_velocity = np.array(msg.desired_arm_joints_velocity)
 
         kp = np.array(msg.arm_kp)
@@ -49,17 +50,16 @@ class PiperHALNode(Node):
 
         # arm control
         for i in range(6):
-           self.piper.JointMitCtrl(i,
+            self.piper.JointMitCtrl(i,
                                     desired_arm_joints_position[i],
-                                    desired_arm_joints_velocity[i], 
-                                    kp[i],kd[i],
+                                    desired_arm_joints_velocity[i],
+                                    kp[i], kd[i],
                                     self.desired_arm_joints_torque[i])
 
         # gripper control #TODO
 
 
     def get_arm_control_signal_callback(self, msg):
-
         self.desired_arm_joints_torque = np.array(msg.desired_arm_joints_torque)
         self.desired_gripper_torque = msg.desired_arm_gripper_torque
 
@@ -124,16 +124,22 @@ class PiperHALNode(Node):
         self.previous_arm_joints_velocity = joints_velocity
         self.previous_gripper_position = gripper_position
 
-#---------------------------
-if __name__ == '__main__':
-    
+
+def main(args=None):
     print('Hello from the Piper hal node.')
     
-    rclpy.init()
+    rclpy.init(args=args)
     piper_hal_node = PiperHALNode()
-    rclpy.spin(piper_hal_node)
-    piper_hal_node.destroy_node()
-    rclpy.shutdown()
-
+    try:
+        rclpy.spin(piper_hal_node)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        piper_hal_node.destroy_node()
+        rclpy.shutdown()
+    
     print("Piper hal node is stopped")
-    exit(0)
+
+
+if __name__ == '__main__':
+    main()

@@ -2,14 +2,17 @@
 
 A wrapper around the `piper_sdk` repository that provides a script for communicating with DLS controllers.
 
+## Repository Contents
+
+This workspace contains the following packages:
+
+- **piper_sdk**: Wrapper around the `piper_sdk` git submodule, automatically installed by `colcon build`
+- **dls2_interface**: Standard messages definition for DLS2
+- **dls2_piper_bridge**: ROS 2 hardware-abstraction-layer for DLS2 controllers
+
 ## Prerequisites
 
-- Install system dependencies:
-
-```bash
-sudo apt update
-sudo apt install -y can-utils
-```
+- Install ROS 2 Jazzy and initialize `rosdep`.
 
 - Clone this repository including submodules:
 
@@ -18,23 +21,21 @@ git clone --recurse-submodules git@github.com:iit-DLSLab/piper-ros2-dls.git
 cd piper-ros2-dls
 ```
 
-## Python environment (uv)
-
-This project includes instructions using the `uv` manager.
-Adapt these commands to your environment if you prefer `venv`, `pipenv`, or `conda`.
-
-Create an environment and activate it:
+- Install rosdep dependencies:
 
 ```bash
-uv venv
-source .venv/bin/activate
+source /opt/ros/jazzy/setup.bash
+rosdep install -y --ignore-src --from-paths ros2_ws/src
 ```
 
-Install the `piper_sdk` package in editable mode and other Python dependencies:
+## Build
+
+Build the ROS 2 workspace with:
 
 ```bash
-uv pip install -e ./piper_sdk
-uv pip install pyyaml numpy
+cd ros2_ws
+colcon build
+source install/setup.bash
 ```
 
 ## Usage
@@ -48,7 +49,8 @@ Activate CAN-bus communication for the arm:
 Run the DLS2 hardware-abstraction-layer launcher script:
 
 ```bash
-python3 launch_piper_hal.py
+source ros2_ws/install/setup.bash
+ros2 run dls2_piper_bridge piper_hal
 ```
 
 ## Maintainer
