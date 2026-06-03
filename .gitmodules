@@ -1,3 +1,7 @@
-[submodule "piper_sdk"]
-	path = piper_sdk
-	url = https://github.com/agilexrobotics/piper_sdk.git
+[submodule "pyAgxArm"]
+	path = pyAgxArm
+	url = https://github.com/agilexrobotics/pyAgxArm.git
+[submodule "ros2_ws/src/agx_arm_ros"]
+	path = ros2_ws/src/agx_arm_ros
+	url = https://github.com/agilexrobotics/agx_arm_ros.git
+	branch = ros2

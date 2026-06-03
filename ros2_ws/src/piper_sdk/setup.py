@@ -5,14 +5,17 @@ from setuptools import find_packages, setup
 
 package_name = "piper_sdk"
 here = os.path.abspath(os.path.dirname(__file__))
-sdk_root_rel = os.path.join("..", "..", "..", "piper_sdk")
+sdk_root_rel = os.path.join("..", "..", "..", "pyAgxArm")
 sdk_root = os.path.abspath(os.path.join(here, sdk_root_rel))
+about = {}
+with open(os.path.join(sdk_root, "pyAgxArm", "version.py"), encoding="utf-8") as version_file:
+    exec(version_file.read(), about)
 
 
 setup(
     name=package_name,
-    version="0.6.1",
-    packages=find_packages(where=sdk_root_rel, include=["piper_sdk", "piper_sdk.*"]),
+    version=about["__version__"],
+    packages=find_packages(where=sdk_root_rel, include=["pyAgxArm", "pyAgxArm.*"]),
     package_dir={"": sdk_root_rel},
     data_files=[
         ("share/ament_index/resource_index/packages", [f"resource/{package_name}"]),
@@ -25,19 +28,18 @@ setup(
     ],
     include_package_data=True,
     package_data={
-        "": ["LICENSE", "*.sh", "*.MD"],
-        "piper_sdk": ["*.sh"],
-        "piper_sdk.demo": ["*.MD"],
+        "*": ["*.pyi"],
+        "pyAgxArm": ["py.typed"],
     },
     zip_safe=True,
-    author="Agilex Robotice Co., Ltd.",
+    author="Agilex Robotics Co., Ltd.",
     author_email="",
     maintainer="Giulio Turrisi",
     maintainer_email="giulio.turrisi@iit.it",
-    description="Piper Python SDK packaged for ROS 2.",
-    long_description=open(os.path.join(sdk_root, "DESCRIPTION.MD"), encoding="utf-8").read(),
+    description="pyAgxArm Python SDK packaged for ROS 2.",
+    long_description=open(os.path.join(sdk_root, "README.md"), encoding="utf-8").read(),
     long_description_content_type="text/markdown",
-    license="MIT",
-    platforms=["Linux"],
+    license="LGPL-3.0-only",
+    platforms=["Linux", "Windows", "Darwin"],
     python_requires=">=3.6",
 )

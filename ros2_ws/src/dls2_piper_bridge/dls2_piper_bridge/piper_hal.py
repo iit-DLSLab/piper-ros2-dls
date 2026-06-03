@@ -5,12 +5,15 @@ from dls2_interface.msg import ArmState, ArmTrajectoryGenerator, ArmControlSigna
 import numpy as np
 import time
 
-from piper_sdk import *
+from pyAgxArm import AgxArmFactory, ArmModel, create_agx_arm_config
 
 
 class PiperHALNode(Node):
     def __init__(self):
         super().__init__('Piper_HAL_Node')
+
+        self.declare_parameter("can_port", "can0")
+        self.can_port = self.get_parameter("can_port").value
 
         arm_state_freq = 300  # Hz
         self.timer = self.create_timer(1/arm_state_freq, self.compute_piper_hal_callback)
@@ -30,70 +33,108 @@ class PiperHALNode(Node):
         self.previous_arm_state_timestamp = None
         self.previous_arm_joints_velocity = np.zeros(6)
         self.previous_gripper_position = 0.0
+        self.current_gripper_position = 0.0
+        self.current_gripper_effort = 0.0
 
         np.set_printoptions(precision=3, suppress=True)
-        self.piper = C_PiperInterface_V2("can0")
-        self.piper.ConnectPort()
-        while not self.piper.EnablePiper():
-            print("Enabling Piper...")
+        piper_config = create_agx_arm_config(
+            robot=ArmModel.PIPER,
+            comm="can",
+            channel=self.can_port,
+        )
+        self.piper = AgxArmFactory.create_arm(piper_config)
+        self.piper.connect()
+        self.gripper = self.piper.init_effector(self.piper.OPTIONS.EFFECTOR.AGX_GRIPPER)
+        self.piper.set_motion_mode(self.piper.OPTIONS.MOTION_MODE.MIT)
+
+        while not self.piper.enable():
+            self.get_logger().info("Enabling Piper...")
             time.sleep(0.01)
-        print("Piper Enabled.")
+        self.get_logger().info("Piper enabled.")
 
 
     def get_arm_trajectory_generator_callback(self, msg):
-        print("TODO: implement trajectory generator callback")
         desired_arm_joints_position = np.array(msg.desired_arm_joints_position)
         desired_arm_joints_velocity = np.array(msg.desired_arm_joints_velocity)
 
         kp = np.array(msg.arm_kp)
         kd = np.array(msg.arm_kd)
 
-        # arm control
+        # Arm control
         for i in range(6):
-            self.piper.JointMitCtrl(i,
-                                    desired_arm_joints_position[i],
-                                    desired_arm_joints_velocity[i],
-                                    kp[i], kd[i],
-                                    self.desired_arm_joints_torque[i])
+            self.piper.move_mit(
+                i + 1,
+                p_des=desired_arm_joints_position[i],
+                v_des=desired_arm_joints_velocity[i],
+                kp=kp[i],
+                kd=kd[i],
+                t_ff=0.0,
+            )
 
-        # gripper control #TODO
+        # Gripper control
+        self.gripper.move_gripper_m(
+            value=float(msg.desired_arm_gripper_position),
+            force=max(0.0, float(self.desired_gripper_torque)),
+        )
 
 
     def get_arm_control_signal_callback(self, msg):
         self.desired_arm_joints_torque = np.array(msg.desired_arm_joints_torque)
         self.desired_gripper_torque = msg.desired_arm_gripper_torque
+        
+        # Arm control
+        for i in range(6):
+            self.piper.move_mit(
+                i + 1,
+                p_des=0.0,
+                v_des=0.0,
+                kp=0.0,
+                kd=0.0,
+                t_ff=self.desired_arm_joints_torque[i],
+            )
+
+        # Gripper control
+        self.gripper.move_gripper_m(
+            value=float(self.current_gripper_position),
+            force=max(0.0, float(self.desired_gripper_torque)),
+        )
 
 
     def compute_piper_hal_callback(self):
         timestamp = self.get_clock().now().nanoseconds * 1e-9
-        high_spd_msg = self.piper.GetArmHighSpdInfoMsgs()
-        low_spd_msg = self.piper.GetArmLowSpdInfoMsgs()
-        gripper_msg = self.piper.GetArmGripperMsgs()
+        motor_states = [self.piper.get_motor_states(i) for i in range(1, 7)]
+        if any(motor_state is None for motor_state in motor_states):
+            return
 
-        high_spd_motors = [
-            high_spd_msg.motor_1,
-            high_spd_msg.motor_2,
-            high_spd_msg.motor_3,
-            high_spd_msg.motor_4,
-            high_spd_msg.motor_5,
-            high_spd_msg.motor_6,
-        ]
-        low_spd_motors = [
-            low_spd_msg.motor_1,
-            low_spd_msg.motor_2,
-            low_spd_msg.motor_3,
-            low_spd_msg.motor_4,
-            low_spd_msg.motor_5,
-            low_spd_msg.motor_6,
-        ]
+        driver_states = [self.piper.get_driver_states(i) for i in range(1, 7)]
 
-        joints_position = np.array([motor.pos for motor in high_spd_motors]) * 1e-3
-        joints_velocity = np.array([motor.motor_speed for motor in high_spd_motors]) * 1e-3
-        joints_effort = np.array([motor.effort for motor in high_spd_motors]) * 1e-3
-        joints_temperature = np.array([motor.motor_temp for motor in low_spd_motors], dtype=float)
+        joints_position = np.array(
+            [motor_state.msg.position for motor_state in motor_states],
+            dtype=float,
+        )
+        joints_velocity = np.array(
+            [motor_state.msg.velocity for motor_state in motor_states],
+            dtype=float,
+        )
+        joints_effort = np.array(
+            [motor_state.msg.torque for motor_state in motor_states],
+            dtype=float,
+        )
+        joints_temperature = np.array(
+            [
+                driver_state.msg.motor_temp if driver_state is not None else 0.0
+                for driver_state in driver_states
+            ],
+            dtype=float,
+        )
 
-        gripper_position = gripper_msg.gripper_state.grippers_angle * 1e-3
-        gripper_effort = gripper_msg.gripper_state.grippers_effort * 1e-3
+        gripper_status = self.gripper.get_gripper_status()
+        if gripper_status is not None:
+            self.current_gripper_position = gripper_status.msg.value
+            self.current_gripper_effort = gripper_status.msg.force
+
+        gripper_position = self.current_gripper_position
+        gripper_effort = self.current_gripper_effort
 
         joints_acceleration = np.zeros(6)
         gripper_velocity = 0.0
@@ -123,6 +164,10 @@ class PiperHALNode(Node):
         self.previous_arm_state_timestamp = timestamp
         self.previous_arm_joints_velocity = joints_velocity
         self.previous_gripper_position = gripper_position
+
+    def destroy_node(self):
+        self.piper.disconnect()
+        super().destroy_node()
 
 
 def main(args=None):
