@@ -22,55 +22,49 @@ This workspace contains the following packages:
 
 - Install ROS 2 Jazzy and initialize `rosdep`.
 
-- Clone this repository including submodules:
+- Clone this repository including submodules
 
-```bash
-git clone --recurse-submodules git@github.com:iit-DLSLab/piper-ros2-dls.git
-cd piper-ros2-dls
-```
+    ```bash
+    git clone --recurse-submodules git@github.com:iit-DLSLab/piper-ros2-dls.git
+    cd piper-ros2-dls
+    ```
 
-- Install rosdep dependencies:
+- Source ROS 2 and install rosdep dependencies
 
-```bash
-source /opt/ros/jazzy/setup.bash
-rosdep install -y --ignore-src --from-paths ros2_ws/src
-```
+    ```bash
+    source /opt/ros/jazzy/setup.bash
+    rosdep install -y --ignore-src --from-paths ros2_ws/src
+    ```
 
-- Install any system dependencies required by the official AgileX packages:
+- Install any system dependencies required by the official AgileX packages
 
-```bash
-sudo apt install can-utils ethtool
-```
+    ```bash
+    sudo apt install can-utils ethtool
+    ```
 
-## Build
+- Build and source the ROS 2 workspace
 
-Build the ROS 2 workspace with:
-
-```bash
-cd ros2_ws
-colcon build
-source install/setup.bash
-```
+    ```bash
+    cd ros2_ws
+    colcon build
+    source install/setup.bash
+    ```
 
 ## Usage
 
-Activate CAN-bus communication for the arm:
+Before using the arm, CAN-bus communication must be manually enabled.
+Assuming the current folder is `ros2_ws`, this can be done with
 
 ```bash
-./ros2_ws/src/agx_arm_ros/scripts/can_activate.sh
+bash ./src/agx_arm_ros/scripts/can_activate.sh
 ```
 
-Run the official AgileX ROS 2 arm controller:
+### DLS 2 bridge
+
+The DLS 2 bridge is independent of the official `agx_arm_ros` packages.
+To run it after building and sourcing the workspace use
 
 ```bash
-source ros2_ws/install/setup.bash
-ros2 launch agx_arm_ctrl start_single_agx_arm.launch.py can_port:=can0 arm_type:=piper_l effector_type:=agx_gripper tcp_offset:='[0.0, 0.0, 0.0, 0.0, 0.0, 0.0]'
-```
-
-Run the DLS2 hardware-abstraction-layer node:
-
-```bash
-source ros2_ws/install/setup.bash
 ros2 run dls2_piper_bridge piper_hal
 ```
 
@@ -79,6 +73,18 @@ The DLS2 bridge accepts the CAN interface as a ROS parameter:
 ```bash
 ros2 run dls2_piper_bridge piper_hal --ros-args -p can_port:=can0
 ```
+
+### ROS 2 MoveIt
+
+A convenient launch file is provided in `agx_arm_ctrl` to run the arm control node together with the MoveIt framework
+
+```bash
+ros2 launch agx_arm_ctrl start_single_agx_arm_moveit.launch.py arm_type:=piper_l effector_type:=agx_gripper follow:=true
+```
+
+> [!WARNING]
+> Running this command will move the arm to the zero configuration.
+> Ensure that there are no obstacles nearby and always start from a nearby configuration.
 
 ## Maintainer
 
