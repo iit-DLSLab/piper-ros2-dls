@@ -4,4 +4,3 @@
 [submodule "ros2_ws/src/agx_arm_ros"]
 	path = ros2_ws/src/agx_arm_ros
 	url = https://github.com/agilexrobotics/agx_arm_ros.git
-	branch = ros2

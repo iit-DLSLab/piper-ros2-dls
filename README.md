@@ -88,4 +88,4 @@ ros2 launch agx_arm_ctrl start_single_agx_arm_moveit.launch.py arm_type:=piper_l
 
 ## Maintainer
 
-This repository is maintained by [Giulio Turrisi](https://github.com/giulioturrisi).
+This repository is maintained by [Giulio Turrisi](https://github.com/giulioturrisi) and [Antonio Langella](https://github.com/AntoSave).
