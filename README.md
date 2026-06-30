@@ -86,6 +86,21 @@ ros2 launch agx_arm_ctrl start_single_agx_arm_moveit.launch.py arm_type:=piper_l
 > Running this command will move the arm to the zero configuration.
 > Ensure that there are no obstacles nearby and always start from a nearby configuration.
 
+## FAQ / Known Issues
+A known bug when installing dependencies using `rosdep` for the `agx_arm_moveit` package gives the error:
+```
+agx_arm_moveit: Cannot locate rosdep definition for [warehouse_ros_mongo]
+```
+
+To patch this, comment the line that sets up the dependency for `warehouse_ros_mongo` in `ros2_ws/src/agx_arm_ros/src/agx_arm_moveit/package.xml`.
+```xml
+...
+<exec_depend>rviz_default_plugins</exec_depend>
+<!-- <exec_depend>warehouse_ros_mongo</exec_depend> -->
+<exec_depend>xacro</exec_depend>
+...
+```
+
 ## Maintainer
 
 This repository is maintained by [Giulio Turrisi](https://github.com/giulioturrisi) and [Antonio Langella](https://github.com/AntoSave).
