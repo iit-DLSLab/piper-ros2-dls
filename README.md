@@ -22,7 +22,6 @@ This workspace contains the following packages:
 
 You can follow a readme based on conda [here](https://github.com/iit-DLSLab/piper-ros2-dls/tree/main/README_conda.md) or manual [here](https://github.com/iit-DLSLab/piper-ros2-dls/tree/main/README_manual.md) 
 
-
 ## ROS 2 HAL
 
 ```bash
