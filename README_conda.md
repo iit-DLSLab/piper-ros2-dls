@@ -20,29 +20,21 @@ This workspace contains the following packages:
 
 ## Installation
 
-You can follow a readme based on conda [here](https://github.com/iit-DLSLab/piper-ros2-dls/tree/main/README_conda.md) or manual [here](https://github.com/iit-DLSLab/piper-ros2-dls/tree/main/README_manual.md) 
+1. install [miniforge](https://github.com/conda-forge/miniforge/releases) (x86_64 or arm64 depending on your platform)
+
+2. create an environment using the file in the folder [installation](https://github.com/iit-DLSLab/piper-ros2-dls/tree/main/installation):
+
+    `conda env create -f installation/mamba_environment.yml`
 
 
-## ROS 2 HAL
+3. clone the other submodules:
+
+    `git submodule update --init --recursive`
+
+4. activate the env and install the submodule
 
 ```bash
 conda activate piper_ros2_env
-python3 launch_piper_hal.py
+pip install -e pyAgxArm/
 ```
 
-### ROS 2 MoveIt
-
-A convenient launch file is provided in `agx_arm_ctrl` to run the arm control node together with the MoveIt framework
-
-```bash
-ros2 launch agx_arm_ctrl start_single_agx_arm_moveit.launch.py arm_type:=piper_l effector_type:=agx_gripper follow:=true
-```
-
-> [!WARNING]
-> Running this command will move the arm to the zero configuration.
-> Ensure that there are no obstacles nearby and always start from a nearby configuration.
-
-
-## Maintainer
-
-This repository is maintained by [Giulio Turrisi](https://github.com/giulioturrisi) and [Antonio Langella](https://github.com/AntoSave).
