@@ -26,7 +26,6 @@ You can follow a readme based on conda [here](https://github.com/iit-DLSLab/pipe
 ## ROS 2 HAL
 
 ```bash
-conda activate piper_ros2_env
 python3 launch_piper_hal.py
 ```
 
