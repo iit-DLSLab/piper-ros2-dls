@@ -22,13 +22,23 @@ This workspace contains the following packages:
 
 You can follow a readme based on conda [here](./README_conda.md) or rosdep [here](./README_rosdep.md) 
 
-## ROS 2 HAL
+## DLS2 HAL
+
+To control the arm with DLS2 nodes, a single python script is provided to launch the HAL
 
 ```bash
 python3 launch_piper_hal.py
 ```
 
-### ROS 2 MoveIt
+## ROS 2 HAL + MoveIt
+
+To control the arm with ROS 2 nodes, the official ROS 2 HAL can be employed. 
+
+Before using the arm, CAN-bus communication must be manually enabled
+
+```bash
+bash ./src/agx_arm_ros/scripts/can_activate.sh
+```
 
 A convenient launch file is provided in `agx_arm_ctrl` to run the arm control node together with the MoveIt framework
 

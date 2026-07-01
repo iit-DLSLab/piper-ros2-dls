@@ -29,12 +29,3 @@
     colcon build
     source install/setup.bash
     ```
-
-## Usage
-
-Before using the arm, CAN-bus communication must be manually enabled.
-Assuming the current folder is `ros2_ws`, this can be done with
-
-```bash
-bash ./src/agx_arm_ros/scripts/can_activate.sh
-```
