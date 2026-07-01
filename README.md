@@ -33,7 +33,7 @@ This workspace contains the following packages:
 
     ```bash
     source /opt/ros/jazzy/setup.bash
-    rosdep install -y --ignore-src --from-paths ros2_ws/src
+    rosdep install -iyr --from-paths ros2_ws/src
     ```
 
 - Install any system dependencies required by the official AgileX packages
