@@ -18,63 +18,27 @@ This workspace contains the following packages:
 - **dls2_interface**: Standard messages definition for DLS2
 - **dls2_piper_bridge**: DLS2 hardware-abstraction-layer using the `pyAgxArm` API
 
-## Prerequisites
+## Installation
 
-- Install ROS 2 Jazzy and initialize `rosdep`.
+You can follow a readme based on conda [here](./README_conda.md) or rosdep [here](./README_rosdep.md) 
 
-- Clone this repository including submodules
+## DLS2 HAL
 
-    ```bash
-    git clone --recurse-submodules git@github.com:iit-DLSLab/piper-ros2-dls.git
-    cd piper-ros2-dls
-    ```
+To control the arm with DLS2 nodes, a single python script is provided to launch the HAL
 
-- Source ROS 2 and install rosdep dependencies
+```bash
+python3 launch_piper_hal.py
+```
 
-    ```bash
-    source /opt/ros/jazzy/setup.bash
-    rosdep install -iyr --from-paths ros2_ws/src
-    ```
+## ROS 2 HAL + MoveIt
 
-- Install any system dependencies required by the official AgileX packages
+To control the arm with ROS 2 nodes, the official ROS 2 HAL can be employed. 
 
-    ```bash
-    sudo apt install can-utils ethtool
-    ```
-
-- Build and source the ROS 2 workspace
-
-    ```bash
-    cd ros2_ws
-    colcon build
-    source install/setup.bash
-    ```
-
-## Usage
-
-Before using the arm, CAN-bus communication must be manually enabled.
-Assuming the current folder is `ros2_ws`, this can be done with
+Before using the arm, CAN-bus communication must be manually enabled
 
 ```bash
 bash ./src/agx_arm_ros/scripts/can_activate.sh
 ```
-
-### DLS 2 bridge
-
-The DLS 2 bridge is independent of the official `agx_arm_ros` packages.
-To run it after building and sourcing the workspace use
-
-```bash
-ros2 run dls2_piper_bridge piper_hal
-```
-
-The DLS2 bridge accepts the CAN interface as a ROS parameter:
-
-```bash
-ros2 run dls2_piper_bridge piper_hal --ros-args -p can_port:=can0
-```
-
-### ROS 2 MoveIt
 
 A convenient launch file is provided in `agx_arm_ctrl` to run the arm control node together with the MoveIt framework
 
@@ -85,6 +49,7 @@ ros2 launch agx_arm_ctrl start_single_agx_arm_moveit.launch.py arm_type:=piper_l
 > [!WARNING]
 > Running this command will move the arm to the zero configuration.
 > Ensure that there are no obstacles nearby and always start from a nearby configuration.
+
 
 ## Maintainer
 
