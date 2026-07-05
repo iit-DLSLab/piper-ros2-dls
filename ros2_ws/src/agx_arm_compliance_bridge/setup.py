@@ -26,9 +26,9 @@ setup(
     install_requires=['setuptools'],
     zip_safe=True,
     author='Antonio Langella',
-    author_email='a.langella42@gmail.com',
+    author_email='antonio.langella@iit.it',
     maintainer='Antonio Langella',
-    maintainer_email='a.langella42@gmail.com',
+    maintainer_email='antonio.langella@iit.it',
     keywords=['ROS'],
     classifiers=[
         'Intended Audience :: Developers',
