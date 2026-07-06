@@ -5,17 +5,17 @@ from glob import glob
 
 from generate_parameter_library_py.setup_helper import generate_parameter_module
 
-package_name = 'agx_arm_compliance_bridge'
+package_name = 'agx_arm_pd_g_controller'
 here = os.path.dirname(os.path.realpath(__file__))
 
 generate_parameter_module(
-    'agx_arm_compliance_bridge_parameters',
-    os.path.join(here, 'agx_arm_compliance_bridge_parameters.yaml'),
+    'agx_arm_pd_g_controller_parameters',
+    os.path.join(here, 'agx_arm_pd_g_controller_parameters.yaml'),
 )
 
 setup(
     name=package_name,
-    version='0.1.0',
+    version='0.2.0',
     packages=[package_name],
     data_files=[
         ('share/ament_index/resource_index/packages', ['resource/' + package_name]),
@@ -35,11 +35,13 @@ setup(
         'Programming Language :: Python',
         'Topic :: Software Development',
     ],
-    description='Republishes JointState commands as MoveMITMsg with configurable compliance gains.',
+    description='Joint-space PD+G controller for the AgileX Piper arm: tracks JointState references via MoveMITMsg with optional MuJoCo-based gravity compensation and a gravity calibration procedure.',
     license='MIT',
     entry_points={
         'console_scripts': [
-            'compliance_bridge_node = agx_arm_compliance_bridge.compliance_bridge_node:main',
+            'pd_g_controller_node = agx_arm_pd_g_controller.pd_g_controller_node:main',
+            'gravity_calibration_node = agx_arm_pd_g_controller.gravity_calibration_node:main',
+            'fit_calibration = agx_arm_pd_g_controller.fit_calibration:main',
         ],
     },
 )

@@ -1,0 +1,32 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>agx_arm_pd_g_controller</name>
+  <version>0.2.0</version>
+  <description>Joint-space PD+G controller for the AgileX Piper arm: tracks JointState references via agx_arm_msgs/MoveMITMsg with optional MuJoCo-based gravity compensation and a gravity calibration procedure.</description>
+  <maintainer email="antonio.langella@iit.it">Antonio Langella</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>python3-setuptools</buildtool_depend>
+
+  <depend>rclpy</depend>
+  <depend>sensor_msgs</depend>
+  <depend>agx_arm_msgs</depend>
+  <depend>generate_parameter_library_py</depend>
+  <exec_depend>ament_index_python</exec_depend>
+  <exec_depend>xacro</exec_depend>
+  <exec_depend>agx_arm_description</exec_depend>
+  <exec_depend>python3-numpy</exec_depend>
+  <exec_depend>python3-yaml</exec_depend>
+  <!-- python3-scipy is only needed for the gravity calibration fitting. -->
+  <exec_depend>python3-scipy</exec_depend>
+  <!-- MuJoCo python bindings, resolved by rosdep via pip. (mujoco_vendor is
+       not suitable: it only ships the C/C++ library, not the python module.) -->
+  <exec_depend>python3-mujoco-pip</exec_depend>
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+  <exec_depend>ros2launch</exec_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

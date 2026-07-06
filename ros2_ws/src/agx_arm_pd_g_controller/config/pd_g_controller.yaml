@@ -1,0 +1,29 @@
+/**:
+  ros__parameters:
+    input_topic: "control/move_mit_joint_states"
+    feedback_topic: "feedback/joint_states"
+    output_topic: "control/move_mit"
+    joints:
+      - joint1
+      - joint2
+      - joint3
+      - joint4
+      - joint5
+      - joint6
+    gains:
+      joint1: {kp: 5.0, kd: 0.5, feedforward_torque: 0.0}
+      joint2: {kp: 5.0, kd: 0.5, feedforward_torque: 0.0}
+      joint3: {kp: 5.0, kd: 0.5, feedforward_torque: 0.0}
+      joint4: {kp: 5.0, kd: 0.5, feedforward_torque: 0.0}
+      joint5: {kp: 5.0, kd: 0.5, feedforward_torque: 0.0}
+      joint6: {kp: 5.0, kd: 0.5, feedforward_torque: 0.0}
+    gravity_compensation:
+      enable: false
+      # model_path and calibration_path are normally set by the launch file
+      # (use_gripper / model_file / calibration_file arguments).
+      model_path: ""
+      calibration_path: ""
+      # 0.25 on joints 1-3 is correct for Piper firmware <= 1.8.post2, which
+      # amplifies MIT torque commands on those joints by 4x. Use 1.0 everywhere
+      # on newer firmware (see README).
+      torque_scaling: [0.25, 0.25, 0.25, 1.0, 1.0, 1.0]

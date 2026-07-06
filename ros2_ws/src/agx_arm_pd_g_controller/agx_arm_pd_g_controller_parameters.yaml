@@ -1,0 +1,51 @@
+pd_g_controller:
+  input_topic:
+    type: string
+    default_value: "~/move_mit_joint_states"
+    description: "sensor_msgs/msg/JointState topic with the joint reference to track."
+  feedback_topic:
+    type: string
+    default_value: "feedback/joint_states"
+    description: "sensor_msgs/msg/JointState topic with the measured robot state, used to evaluate gravity compensation."
+  output_topic:
+    type: string
+    default_value: "~/control/move_mit"
+    description: "agx_arm_msgs/msg/MoveMITMsg topic to publish the PD(+G) commands on."
+  joints:
+    type: string_array
+    description: "Ordered joint names to control. A joint's position in this list is the joint_index it is published with in MoveMITMsg. Only JointState entries whose name appears here are forwarded. Required, must be set via YAML."
+  gains:
+    __map_joints:
+      kp:
+        type: double
+        default_value: 1.0
+        description: "MIT-mode position gain (stiffness) for this joint."
+        validation:
+          gt_eq<>: [0]
+      kd:
+        type: double
+        default_value: 0.5
+        description: "MIT-mode velocity gain (damping) for this joint."
+        validation:
+          gt_eq<>: [0]
+      feedforward_torque:
+        type: double
+        default_value: 0.0
+        description: "MIT-mode feed-forward torque added for this joint (on top of gravity compensation, if enabled)."
+  gravity_compensation:
+    enable:
+      type: bool
+      default_value: false
+      description: "Add MuJoCo-based gravity compensation torque to each joint's feed-forward torque."
+    model_path:
+      type: string
+      default_value: ""
+      description: "Path to the robot model used for gravity computation: a MuJoCo .xml, or a .urdf/.xacro (e.g. from agx_arm_description) converted on the fly. Required when enable is true."
+    calibration_path:
+      type: string
+      default_value: ""
+      description: "Optional gravity calibration YAML produced by the gravity calibration procedure. When empty, torque_scaling is applied to the raw MuJoCo torque instead."
+    torque_scaling:
+      type: double_array
+      default_value: [0.25, 0.25, 0.25, 1.0, 1.0, 1.0]
+      description: "Per-joint scaling applied to the raw MuJoCo gravity torque when no calibration file is given. The 0.25 default on joints 1-3 matches Piper firmware <= 1.8.post2, which amplifies MIT torque commands on those joints by 4x; use 1.0 everywhere on newer firmware (see README)."
