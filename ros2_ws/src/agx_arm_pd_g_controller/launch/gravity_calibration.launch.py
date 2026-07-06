@@ -55,6 +55,7 @@ def launch_setup(context):
         output='screen',
         parameters=[{
             'model_path': resolve_model_path(context),
+            'feedback_topic': context.launch_configurations['feedback_topic'],
             'num_samples': int(context.launch_configurations['num_samples']),
             'samples_output': context.launch_configurations['samples_output'],
             'calibration_output': context.launch_configurations['calibration_output'],
@@ -91,6 +92,12 @@ def generate_launch_description():
             default_value='',
             description='Explicit robot model file (.xml MJCF, .urdf, or .xacro). '
                         'Overrides use_gripper.',
+        ),
+        DeclareLaunchArgument(
+            'feedback_topic',
+            default_value='feedback/joint_states',
+            description='sensor_msgs/JointState topic with the measured robot state '
+                        '(relative; pushed under namespace like the node itself).',
         ),
         DeclareLaunchArgument(
             'num_samples',
