@@ -17,6 +17,7 @@ Ported to ROS 2 from https://github.com/Reimagine-Robotics/piper_control
 (generate_samples.py).
 """
 
+import math
 import os
 import threading
 import time
@@ -80,6 +81,15 @@ class GravityCalibrationNode(Node):
         self.return_to_start = self.declare_parameter("return_to_start", True).value
         self.check_ground = self.declare_parameter("check_ground", True).value
         self.ground_height = self.declare_parameter("ground_height", 0.0).value
+        self.wall_x_pos = self.declare_parameter("wall_x_pos", math.nan).value
+        self.wall_x_neg = self.declare_parameter("wall_x_neg", math.nan).value
+        self.wall_y_pos = self.declare_parameter("wall_y_pos", math.nan).value
+        self.wall_y_neg = self.declare_parameter("wall_y_neg", math.nan).value
+        self.settle_velocity_threshold = self.declare_parameter(
+            "settle_velocity_threshold", 0.02
+        ).value
+        self.settle_timeout = self.declare_parameter("settle_timeout", 3.0).value
+        self.settle_check_period = self.declare_parameter("settle_check_period", 0.05).value
 
         if len(self.kp) != len(self.joints) or len(self.kd) != len(self.joints):
             raise RuntimeError("'kp' and 'kd' must have one entry per joint.")
@@ -90,12 +100,19 @@ class GravityCalibrationNode(Node):
             joint_names=self.joints,
         )
         # Separate model for collision checking, with a ground plane at
-        # z=ground_height so samples below base level (table mounts) are
-        # rejected too.
+        # z=ground_height and optional walls so samples below base level
+        # (table mounts) or beyond the walls are rejected too.
+        walls = {
+            "x_pos": None if math.isnan(self.wall_x_pos) else self.wall_x_pos,
+            "x_neg": None if math.isnan(self.wall_x_neg) else self.wall_x_neg,
+            "y_pos": None if math.isnan(self.wall_y_pos) else self.wall_y_pos,
+            "y_neg": None if math.isnan(self.wall_y_neg) else self.wall_y_neg,
+        }
         self.mj_model = load_mujoco_model(
             self.model_path,
             add_ground_plane=self.check_ground,
             ground_height=self.ground_height,
+            walls=walls,
         )
         self.mj_data = mujoco.MjData(self.mj_model)
         collision_joint_ids = [self.mj_model.joint(n).id for n in self.joints]
@@ -103,6 +120,7 @@ class GravityCalibrationNode(Node):
 
         self._feedback_lock = threading.Lock()
         self._positions = {}
+        self._velocities = {}
         self._efforts = {}
 
         self.publisher = self.create_publisher(MoveMITMsg, self.output_topic, 1)
@@ -116,21 +134,25 @@ class GravityCalibrationNode(Node):
 
     def _feedback_callback(self, msg: JointState) -> None:
         has_effort = len(msg.effort) == len(msg.name)
+        has_velocity = len(msg.velocity) == len(msg.name)
         with self._feedback_lock:
             for i, name in enumerate(msg.name):
                 self._positions[name] = msg.position[i]
                 if has_effort:
                     self._efforts[name] = msg.effort[i]
+                if has_velocity:
+                    self._velocities[name] = msg.velocity[i]
 
     def _get_state(self):
-        """Measured (qpos, efforts) ordered per self.joints, or None if incomplete."""
+        """Measured (qpos, efforts, velocity) ordered per self.joints, or None if incomplete."""
         with self._feedback_lock:
             try:
                 qpos = np.array([self._positions[j] for j in self.joints])
                 efforts = np.array([self._efforts[j] for j in self.joints])
+                velocity = np.array([self._velocities[j] for j in self.joints])
             except KeyError:
                 return None
-        return qpos, efforts
+        return qpos, efforts, velocity
 
     def _command(self, positions) -> None:
         msg = MoveMITMsg()
@@ -143,8 +165,8 @@ class GravityCalibrationNode(Node):
             msg.torque.append(0.0)
         self.publisher.publish(msg)
 
-    def _move_to(self, start, target, samples_qpos=None, samples_efforts=None, samples_target=None):
-        """Linearly interpolate from start to target, optionally recording samples."""
+    def _move_to(self, start, target) -> bool:
+        """Linearly interpolate from start to target."""
         dt = 1.0 / self.control_frequency
         num_steps = max(1, int(self.move_duration * self.control_frequency))
         for step in range(num_steps):
@@ -153,17 +175,34 @@ class GravityCalibrationNode(Node):
             alpha = (step + 1) / num_steps
             interp = start + alpha * (target - start)
             self._command(interp)
-
-            if samples_qpos is not None:
-                state = self._get_state()
-                if state is not None:
-                    qpos, efforts = state
-                    samples_qpos.append(qpos)
-                    samples_efforts.append(efforts)
-                    samples_target.append(interp.copy())
-
             time.sleep(dt)
         return True
+
+    def _wait_until_settled(self, target):
+        """Hold `target` until measured velocity settles, then return (qpos, efforts).
+
+        Returns None if stopped externally. Recording gravity-torque samples
+        while the arm is still moving contaminates them with inertial,
+        centrifugal/Coriolis, and friction effects unrelated to gravity, so we
+        wait for the joints to (near-)stop before taking the measurement.
+        """
+        deadline = time.time() + self.settle_timeout
+        while time.time() < deadline:
+            if self._stop_event.is_set():
+                return None
+            self._command(target)
+            state = self._get_state()
+            if state is not None:
+                qpos, efforts, velocity = state
+                if np.all(np.abs(velocity) < self.settle_velocity_threshold):
+                    return qpos, efforts
+            time.sleep(self.settle_check_period)
+        self.get_logger().warning(
+            f"Timed out after {self.settle_timeout}s waiting for the arm to settle; "
+            "recording the sample anyway."
+        )
+        state = self._get_state()
+        return (state[0], state[1]) if state is not None else None
 
     def _is_collision_free(self, qpos) -> bool:
         self.mj_data.qpos[:] = 0.0
@@ -238,8 +277,16 @@ class GravityCalibrationNode(Node):
             )
 
             current = self._get_state()[0]
-            if not self._move_to(current, target, samples_qpos, samples_efforts, samples_target):
+            if not self._move_to(current, target):
                 return
+
+            settled = self._wait_until_settled(target)
+            if settled is None:
+                return
+            qpos, efforts = settled
+            samples_qpos.append(qpos)
+            samples_efforts.append(efforts)
+            samples_target.append(target.copy())
 
         if self.return_to_start:
             self.get_logger().info("Returning to the initial configuration...")

@@ -74,9 +74,17 @@ The node visits `num_samples` collision-free configurations (Halton sequence,
 checked against the model's collision geometry). Collision checking also
 includes a virtual ground plane at `ground_height:=0.0` in the base frame, so
 table-mounted arms never sample below base level — lower it or set
-`check_ground:=false` if the arm may reach below its base. While moving
-between configurations, the node records measured joint positions and
-efforts at 200 Hz.
+`check_ground:=false` if the arm may reach below its base. Optional invisible
+walls can also be added at `wall_x_pos`/`wall_x_neg`/`wall_y_pos`/`wall_y_neg`
+(each a coordinate in meters, base frame; empty disables that side) to keep
+the arm away from nearby obstacles such as a wall, monitor, or another robot —
+the four sides are independent, so the box need not be symmetric.
+
+After moving to each target, the node holds position and waits for the
+measured joint velocities to settle below `settle_velocity_threshold`
+(default 0.02 rad/s, up to `settle_timeout` seconds) before recording that
+sample's position and effort. Recording while still moving would contaminate
+the sample with inertial/friction effects unrelated to gravity.
 
 For each recorded sample it computes the MuJoCo-predicted gravity torque
 `tau_sim = qfrc_bias(qpos)` (zero velocity, so this is exactly the gravity

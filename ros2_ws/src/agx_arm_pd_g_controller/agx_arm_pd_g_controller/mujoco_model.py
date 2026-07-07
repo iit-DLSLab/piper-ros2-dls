@@ -14,12 +14,21 @@ import os
 import tempfile
 import xml.etree.ElementTree as ET
 from collections import Counter
-from typing import Callable, Optional
+from typing import Callable, Dict, Optional
 
 import mujoco
 import numpy as np
 
 _HALTON_PRIMES = (2, 3, 5, 7, 11, 13, 17, 19)
+
+# Wall keys accepted by the `walls` dict argument of load_mujoco_model /
+# _compile_spec, and the axis/side each corresponds to.
+_WALL_SIDES = {
+    "x_pos": ("x", 1.0),
+    "x_neg": ("x", -1.0),
+    "y_pos": ("y", 1.0),
+    "y_neg": ("y", -1.0),
+}
 
 
 def _default_package_resolver(package_name: str) -> str:
@@ -79,6 +88,7 @@ def load_mujoco_model(
     package_resolver: Optional[Callable[[str], str]] = None,
     add_ground_plane: bool = False,
     ground_height: float = 0.0,
+    walls: Optional[Dict[str, Optional[float]]] = None,
 ) -> mujoco.MjModel:
     """Load a MuJoCo model from a .xml (MJCF), .urdf, or .xacro file.
 
@@ -87,11 +97,17 @@ def load_mujoco_model(
     configurations that dip below base level (e.g. table-mounted arms). The
     base link is welded to the world, so it is automatically excluded from
     plane contacts.
+
+    walls optionally adds invisible collision walls in the base frame: a dict
+    with any of the keys "x_pos", "x_neg", "y_pos", "y_neg" mapped to the wall's
+    coordinate along that axis (None or omitted disables that side). Sides are
+    independent, so the box need not be symmetric. Like the ground plane, the
+    base link is welded to the world and excluded from wall contacts.
     """
     extension = os.path.splitext(model_path)[1].lower()
 
     if extension == ".xml":
-        return _compile_spec(model_path, add_ground_plane, ground_height)
+        return _compile_spec(model_path, add_ground_plane, ground_height, walls)
 
     if extension == ".xacro":
         import xacro
@@ -113,13 +129,44 @@ def load_mujoco_model(
         f.write(processed)
         tmp_path = f.name
     try:
-        return _compile_spec(tmp_path, add_ground_plane, ground_height)
+        return _compile_spec(tmp_path, add_ground_plane, ground_height, walls)
     finally:
         os.unlink(tmp_path)
 
 
+def _add_wall(
+    spec,
+    key: str,
+    distance: float,
+    thickness: float = 0.02,
+    half_extent: float = 5.0,
+    z_center: float = 1.0,
+    z_half_extent: float = 2.0,
+) -> None:
+    """Add a thin box geom acting as an invisible wall perpendicular to key's axis.
+
+    The box's inner face sits exactly at `distance` (in the base frame) along
+    the axis, and extends further away from the origin from there, so any
+    configuration reaching past `distance` registers a contact.
+    """
+    axis, sign = _WALL_SIDES[key]
+    center = distance + sign * thickness / 2.0
+    geom = spec.worldbody.add_geom()
+    geom.name = f"wall_{key}"
+    geom.type = mujoco.mjtGeom.mjGEOM_BOX
+    if axis == "x":
+        geom.size = [thickness / 2.0, half_extent, z_half_extent]
+        geom.pos = [center, 0.0, z_center]
+    else:
+        geom.size = [half_extent, thickness / 2.0, z_half_extent]
+        geom.pos = [0.0, center, z_center]
+
+
 def _compile_spec(
-    path: str, add_ground_plane: bool, ground_height: float
+    path: str,
+    add_ground_plane: bool,
+    ground_height: float,
+    walls: Optional[Dict[str, Optional[float]]] = None,
 ) -> mujoco.MjModel:
     spec = mujoco.MjSpec.from_file(path)
     if add_ground_plane:
@@ -128,6 +175,12 @@ def _compile_spec(
         geom.type = mujoco.mjtGeom.mjGEOM_PLANE
         geom.size = [0.0, 0.0, 0.1]
         geom.pos = [0.0, 0.0, ground_height]
+    for key, distance in (walls or {}).items():
+        if distance is None:
+            continue
+        if key not in _WALL_SIDES:
+            raise ValueError(f"Unknown wall key '{key}'. Expected one of {list(_WALL_SIDES)}.")
+        _add_wall(spec, key, distance)
     return spec.compile()
 
 

@@ -46,25 +46,36 @@ def resolve_model_path(context) -> str:
     )
 
 
+def _maybe_float(context, name):
+    value = context.launch_configurations[name]
+    return float(value) if value else None
+
+
 def launch_setup(context):
+    parameters = {
+        'model_path': resolve_model_path(context),
+        'feedback_topic': context.launch_configurations['feedback_topic'],
+        'num_samples': int(context.launch_configurations['num_samples']),
+        'samples_output': context.launch_configurations['samples_output'],
+        'calibration_output': context.launch_configurations['calibration_output'],
+        'fit_model_type': context.launch_configurations['fit_model_type'],
+        'start_delay': float(context.launch_configurations['start_delay']),
+        'check_ground': context.launch_configurations['check_ground'].lower()
+            in ('true', '1'),
+        'ground_height': float(context.launch_configurations['ground_height']),
+    }
+    for wall in ('wall_x_pos', 'wall_x_neg', 'wall_y_pos', 'wall_y_neg'):
+        value = _maybe_float(context, wall)
+        if value is not None:
+            parameters[wall] = value
+
     node = Node(
         package='agx_arm_pd_g_controller',
         executable='gravity_calibration_node',
         name='gravity_calibration',
         namespace=LaunchConfiguration('namespace'),
         output='screen',
-        parameters=[{
-            'model_path': resolve_model_path(context),
-            'feedback_topic': context.launch_configurations['feedback_topic'],
-            'num_samples': int(context.launch_configurations['num_samples']),
-            'samples_output': context.launch_configurations['samples_output'],
-            'calibration_output': context.launch_configurations['calibration_output'],
-            'fit_model_type': context.launch_configurations['fit_model_type'],
-            'start_delay': float(context.launch_configurations['start_delay']),
-            'check_ground': context.launch_configurations['check_ground'].lower()
-                in ('true', '1'),
-            'ground_height': float(context.launch_configurations['ground_height']),
-        }],
+        parameters=[parameters],
     )
     return [node]
 
@@ -136,6 +147,30 @@ def generate_launch_description():
             description='Height (m) of the virtual ground plane in the robot base '
                         'frame. Lower it if the arm may legitimately reach below '
                         'base level.',
+        ),
+        DeclareLaunchArgument(
+            'wall_x_pos',
+            default_value='',
+            description='Optional invisible collision wall coordinate (m) on the '
+                        '+X side, in the robot base frame. Empty disables it. ',
+        ),
+        DeclareLaunchArgument(
+            'wall_x_neg',
+            default_value='',
+            description='Optional invisible collision wall coordinate (m) on the '
+                        '-X side, in the robot base frame. Empty disables it.',
+        ),
+        DeclareLaunchArgument(
+            'wall_y_pos',
+            default_value='',
+            description='Optional invisible collision wall coordinate (m) on the '
+                        '+Y side, in the robot base frame. Empty disables it.',
+        ),
+        DeclareLaunchArgument(
+            'wall_y_neg',
+            default_value='',
+            description='Optional invisible collision wall coordinate (m) on the '
+                        '-Y side, in the robot base frame. Empty disables it.',
         ),
         OpaqueFunction(function=launch_setup),
     ])
