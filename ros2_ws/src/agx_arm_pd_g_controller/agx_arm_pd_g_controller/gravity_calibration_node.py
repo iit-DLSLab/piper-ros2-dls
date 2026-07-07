@@ -117,6 +117,17 @@ class GravityCalibrationNode(Node):
         self.mj_data = mujoco.MjData(self.mj_model)
         collision_joint_ids = [self.mj_model.joint(n).id for n in self.joints]
         self.collision_qpos_indices = self.mj_model.jnt_qposadr[collision_joint_ids]
+        # Joints not in `self.joints` (e.g. a gripper) are not sampled during
+        # calibration, but still need *some* qpos for collision checking.
+        # Defaulting them to 0 is wrong in general: 0 can sit at the edge of
+        # a joint's range (e.g. a gripper fully closed), which can register a
+        # permanent, arm-configuration-independent self-collision between its
+        # own links and reject every single sample. The range midpoint is a
+        # much safer default for this.
+        self._collision_qpos_default = np.zeros(self.mj_model.nq)
+        self._collision_qpos_default[self.mj_model.jnt_qposadr] = self.mj_model.jnt_range.mean(
+            axis=1
+        )
 
         self._feedback_lock = threading.Lock()
         self._positions = {}
@@ -205,7 +216,7 @@ class GravityCalibrationNode(Node):
         return (state[0], state[1]) if state is not None else None
 
     def _is_collision_free(self, qpos) -> bool:
-        self.mj_data.qpos[:] = 0.0
+        self.mj_data.qpos[:] = self._collision_qpos_default
         self.mj_data.qpos[self.collision_qpos_indices] = qpos
         contacts = get_colliding_body_pairs(self.mj_model, self.mj_data)
         if contacts:
@@ -232,7 +243,7 @@ class GravityCalibrationNode(Node):
         start_state = self._get_state()
         initial_qpos = start_state[0]
 
-        self.mj_data.qpos[:] = 0.0
+        self.mj_data.qpos[:] = self._collision_qpos_default
         self.mj_data.qpos[self.collision_qpos_indices] = initial_qpos
         contacts = get_colliding_body_pairs(self.mj_model, self.mj_data)
         if contacts:
