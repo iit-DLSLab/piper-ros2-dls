@@ -30,7 +30,7 @@ To control the arm with ROS2, with custom messages from DLS, a single python scr
 python3 launch_piper_hal.py
 ```
 
-## ROS2 Official HAL + MoveIt (with standard ros2 messages)
+## ROS2-Official HAL + MoveIt (with standard ros2 messages)
 
 To control the arm with ROS2 nodes, with standard ros2 messages, the official ROS 2 HAL can be employed. 
 
