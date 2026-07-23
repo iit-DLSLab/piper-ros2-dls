@@ -68,7 +68,7 @@ class PiperHALNode(Node):
                 v_des=desired_arm_joints_velocity[i],
                 kp=kp[i],
                 kd=kd[i],
-                t_ff=0.0,
+                t_ff=self.desired_arm_joints_torque[i],
             )
 
         # Gripper control
@@ -81,23 +81,6 @@ class PiperHALNode(Node):
     def get_arm_control_signal_callback(self, msg):
         self.desired_arm_joints_torque = np.array(msg.desired_arm_joints_torque)
         self.desired_gripper_torque = msg.desired_arm_gripper_torque
-        
-        # Arm control
-        for i in range(6):
-            self.piper.move_mit(
-                i + 1,
-                p_des=0.0,
-                v_des=0.0,
-                kp=0.0,
-                kd=0.0,
-                t_ff=self.desired_arm_joints_torque[i],
-            )
-
-        # Gripper control
-        self.gripper.move_gripper_m(
-            value=float(self.current_gripper_position),
-            force=max(0.0, float(self.desired_gripper_torque)),
-        )
 
 
     def compute_piper_hal_callback(self):
