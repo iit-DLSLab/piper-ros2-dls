@@ -24,7 +24,7 @@ You can follow a readme based on conda [here](./README_conda.md) or rosdep [here
 
 ## ROS2-DLS HAL (with custom messages)
 
-To control the arm with ROS2, with custom messages from DLS, a single python script is provided to launch the HAL
+To control the arm using ROS2 **with custom messages from DLS**, a single python script is provided to launch the HAL
 
 ```bash
 python3 launch_piper_hal.py
@@ -34,7 +34,7 @@ These custom messages can be found [here](./ros2_ws/src/dls2_interface/msg/) and
 
 ## ROS2-Official HAL + MoveIt (with standard ros2 messages)
 
-To control the arm with ROS2 nodes, with standard ros2 messages, the official ROS 2 HAL can be employed. 
+To control the arm using ROS2  **with standard ros2 messages**, the official ROS 2 HAL can be employed. 
 
 Before using the arm, CAN-bus communication must be manually enabled
 
