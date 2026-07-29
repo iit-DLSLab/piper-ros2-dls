@@ -8,6 +8,9 @@ import time
 from pyAgxArm import AgxArmFactory, ArmModel, create_agx_arm_config
 
 
+PIPER_SCALE_KP = [30.0, 30.0, 30.0, 1.0, 1.0, 1.0]
+PIPER_SCALE_KD = [25.0, 25.0, 25.0, 1.0, 1.0, 1.0]
+
 class PiperHALNode(Node):
     def __init__(self):
         super().__init__('Piper_HAL_Node')
@@ -66,8 +69,8 @@ class PiperHALNode(Node):
                 i + 1,
                 p_des=desired_arm_joints_position[i],
                 v_des=desired_arm_joints_velocity[i],
-                kp=kp[i],
-                kd=kd[i],
+                kp=kp[i] / PIPER_SCALE_KP[i],
+                kd=kd[i] / PIPER_SCALE_KD[i],
                 t_ff=self.desired_arm_joints_torque[i],
             )
 

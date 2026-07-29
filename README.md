@@ -32,6 +32,8 @@ python3 launch_piper_hal.py
 
 These custom messages can be found [here](./ros2_ws/src/dls2_interface/msg/) and are automatically compiled when launching the script above.
 
+**Important**: We believe that some internal scaling are happening for Kp/Kd values for joints1-2-3. We identified these values, and we apply an inverse scaling in the hal (see ). In this way, gains in simulation matches more closely the one on the real robot.
+
 ## ROS2-Official HAL + MoveIt (with standard ros2 messages)
 
 To control the arm using ROS2  **with standard ros2 messages**, the official ROS 2 HAL can be employed. 
