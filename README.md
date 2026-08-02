@@ -15,6 +15,7 @@ This workspace contains the following packages:
 
 - **piper_sdk**: ROS 2 wrapper around the `pyAgxArm` git submodule, automatically installed by `colcon build`
 - **agx_arm_ros**: Official AgileX ROS 2 packages for control, messages, description, and MoveIt
+- **agx_arm_pd_g_controller**: A PD+G controller for the arm, based on the official AgileX ROS 2 HAL
 - **dls2_interface**: Standard messages definition for DLS2
 - **dls2_piper_bridge**: DLS2 hardware-abstraction-layer using the `pyAgxArm` API
 
