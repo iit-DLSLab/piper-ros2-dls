@@ -42,6 +42,7 @@ setup(
             'pd_g_controller_node = agx_arm_pd_g_controller.pd_g_controller_node:main',
             'gravity_calibration_node = agx_arm_pd_g_controller.gravity_calibration_node:main',
             'fit_calibration = agx_arm_pd_g_controller.fit_calibration:main',
+            'friction_hysteresis_check_node = agx_arm_pd_g_controller.friction_hysteresis_check_node:main',
         ],
     },
 )
