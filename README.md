@@ -22,17 +22,24 @@ This workspace contains the following packages:
 
 You can follow a readme based on conda [here](./README_conda.md) or rosdep [here](./README_rosdep.md) 
 
-## DLS2 HAL
+## ROS2-DLS HAL (with custom messages)
 
-To control the arm with DLS2 nodes, a single python script is provided to launch the HAL
+To control the arm using ROS2 **with custom messages from DLS**, a single python script is provided to launch the HAL
 
 ```bash
 python3 launch_piper_hal.py
 ```
 
-## ROS 2 HAL + MoveIt
+These custom messages can be found [here](./ros2_ws/src/dls2_interface/msg/) and are automatically compiled when launching the script above.
 
-To control the arm with ROS 2 nodes, the official ROS 2 HAL can be employed. 
+**Important**: We believe that some internal scaling are happening for Kp/Kd values for joints1-2-3.
+We identified these values, and we apply an inverse scaling in the hal (see [the hal code](./ros2_ws/src/dls2_piper_bridge/dls2_piper_bridge/piper_hal.py)).
+In this way, gains in simulation matches more closely the one on the real robot.
+Note that this scaling is **not applied in the official ROS2 HAL**, so it must be applied manually when using the official ROS2 HAL.
+
+## ROS2-Official HAL + MoveIt (with standard ros2 messages)
+
+To control the arm using ROS2  **with standard ros2 messages**, the official ROS 2 HAL can be employed. 
 
 Before using the arm, CAN-bus communication must be manually enabled
 
