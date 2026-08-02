@@ -32,7 +32,10 @@ python3 launch_piper_hal.py
 
 These custom messages can be found [here](./ros2_ws/src/dls2_interface/msg/) and are automatically compiled when launching the script above.
 
-**Important**: We believe that some internal scaling are happening for Kp/Kd values for joints1-2-3. We identified these values, and we apply an inverse scaling in the hal (see ). In this way, gains in simulation matches more closely the one on the real robot.
+**Important**: We believe that some internal scaling are happening for Kp/Kd values for joints1-2-3.
+We identified these values, and we apply an inverse scaling in the hal (see [the hal code](./ros2_ws/src/dls2_piper_bridge/dls2_piper_bridge/piper_hal.py)).
+In this way, gains in simulation matches more closely the one on the real robot.
+Note that this scaling is **not applied in the official ROS2 HAL**, so it must be applied manually when using the official ROS2 HAL.
 
 ## ROS2-Official HAL + MoveIt (with standard ros2 messages)
 
