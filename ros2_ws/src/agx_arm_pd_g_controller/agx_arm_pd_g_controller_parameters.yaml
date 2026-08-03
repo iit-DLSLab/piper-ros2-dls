@@ -11,6 +11,12 @@ pd_g_controller:
     type: string
     default_value: "~/control/move_mit"
     description: "agx_arm_msgs/msg/MoveMITMsg topic to publish the PD(+G) commands on."
+  control_rate:
+    type: double
+    default_value: 200.0
+    description: "Rate (Hz) at which commands are published. Decoupled from input_topic's rate so gravity compensation keeps tracking the measured pose even when the reference setpoint updates more slowly."
+    validation:
+      gt<>: [0]
   joints:
     type: string_array
     description: "Ordered joint names to control. A joint's position in this list is the joint_index it is published with in MoveMITMsg. Only JointState entries whose name appears here are forwarded. Required, must be set via YAML."

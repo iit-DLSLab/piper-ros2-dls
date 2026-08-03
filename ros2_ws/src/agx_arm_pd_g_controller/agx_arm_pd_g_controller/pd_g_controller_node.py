@@ -55,6 +55,7 @@ class PdGControllerNode(Node):
             )
 
         self.measured_positions = {}
+        self.latest_setpoint = None
 
         self.publisher = self.create_publisher(MoveMITMsg, self.params.output_topic, 1)
         self.feedback_subscription = self.create_subscription(
@@ -63,10 +64,14 @@ class PdGControllerNode(Node):
         self.subscription = self.create_subscription(
             JointState, self.params.input_topic, self._joint_state_callback, 1
         )
+        self.control_timer = self.create_timer(
+            1.0 / self.params.control_rate, self._control_step
+        )
         self.get_logger().info(
             f"PD{'+G' if self.params.gravity_compensation.enable else ''} control: "
             f"'{self.params.input_topic}' -> '{self.params.output_topic}' "
-            f"for joints {self.params.joints} (feedback: '{self.params.feedback_topic}')"
+            f"for joints {self.params.joints} (feedback: '{self.params.feedback_topic}') "
+            f"at {self.params.control_rate} Hz"
         )
 
     def _feedback_callback(self, msg: JointState) -> None:
@@ -88,6 +93,13 @@ class PdGControllerNode(Node):
         return dict(zip(self.params.joints, tau))
 
     def _joint_state_callback(self, msg: JointState) -> None:
+        self.latest_setpoint = msg
+
+    def _control_step(self) -> None:
+        msg = self.latest_setpoint
+        if msg is None:
+            return
+
         if self.param_listener.is_old(self.params):
             self.params = self.param_listener.get_params()
 
