@@ -58,8 +58,14 @@ class PdGControllerNode(Node):
             )
 
         self.measured_positions = {}
+        self.measured_velocities = {}
         self.measured_efforts = {}
         self.latest_setpoint = None
+        # Last MIT command actually sent per joint (p_des, v_des, kp, kd, torque),
+        # used to reconstruct what the firmware's own kp*(p_des-p)+kd*(v_des-v)+t_ff
+        # law is contributing to measured_efforts, so external torque estimation can
+        # subtract it out instead of misreading it as contact force.
+        self.last_command = {}
 
         self.external_torque_publisher = None
         if self.params.external_torque_estimation.enable:
@@ -96,19 +102,46 @@ class PdGControllerNode(Node):
     def _feedback_callback(self, msg: JointState) -> None:
         for name, position in zip(msg.name, msg.position):
             self.measured_positions[name] = position
+        if len(msg.velocity) == len(msg.name):
+            for name, velocity in zip(msg.name, msg.velocity):
+                self.measured_velocities[name] = velocity
         if len(msg.effort) == len(msg.name):
             for name, effort in zip(msg.name, msg.effort):
                 self.measured_efforts[name] = effort
 
     def _external_torques(self):
-        """Per-joint external torque estimate (measured - MuJoCo gravity), or None if not ready."""
+        """Per-joint external torque estimate, or None if not ready.
+
+        measured_effort is the *total* motor torque, which includes whatever
+        the MIT firmware's own kp*(p_des-p)+kd*(v_des-v)+t_ff law is actively
+        commanding to track the last-sent reference - not just gravity and
+        contact. Subtracting only gravity would misattribute that tracking
+        effort (e.g. while chasing a moving reference) to external contact.
+        Reconstruct and subtract the full last-commanded torque instead; if no
+        MIT command has been sent yet for a joint (e.g. before the first
+        setpoint, or during a move_j-based homing phase), fall back to
+        subtracting gravity alone.
+        """
         try:
             qpos = [self.measured_positions[name] for name in self.params.joints]
+            qvel = [self.measured_velocities.get(name, 0.0) for name in self.params.joints]
             measured = [self.measured_efforts[name] for name in self.params.joints]
         except KeyError:
             return None
         gravity = self.gravity_model.raw_gravity_torque(qpos)
-        return [m - g for m, g in zip(measured, gravity)]
+        tau_ext = []
+        for i, name in enumerate(self.params.joints):
+            command = self.last_command.get(name)
+            if command is None:
+                commanded_torque = gravity[i]
+            else:
+                commanded_torque = (
+                    command["kp"] * (command["p_des"] - qpos[i])
+                    + command["kd"] * (command["v_des"] - qvel[i])
+                    + command["torque"]
+                )
+            tau_ext.append(measured[i] - commanded_torque)
+        return tau_ext
 
     def _publish_external_torque(self) -> None:
         tau_ext = self._external_torques()
@@ -178,12 +211,23 @@ class PdGControllerNode(Node):
                 ]
                 torque += msg.effort[i] * scale
 
+            p_des = msg.position[i]
+            v_des = msg.velocity[i] if has_velocity else 0.0
+
             out.joint_index.append(joint_index)
-            out.p_des.append(msg.position[i])
-            out.v_des.append(msg.velocity[i] if has_velocity else 0.0)
+            out.p_des.append(p_des)
+            out.v_des.append(v_des)
             out.kp.append(gains.kp)
             out.kd.append(gains.kd)
             out.torque.append(torque)
+
+            self.last_command[name] = {
+                "p_des": p_des,
+                "v_des": v_des,
+                "kp": gains.kp,
+                "kd": gains.kd,
+                "torque": torque,
+            }
 
         if not out.joint_index:
             return
