@@ -27,6 +27,9 @@ class PdGControllerNode(Node):
             )
         # The Piper SDK's MIT joint_index is 1-based (joint1 == 1, ..., joint6 == 6).
         self.joint_indices = {name: i for i, name in enumerate(self.params.joints, start=1)}
+        # 0-based position in params.joints, matching the ordering of the
+        # gravity_compensation/remote_force_feedforward torque_scaling arrays.
+        self.joint_list_index = {name: i for i, name in enumerate(self.params.joints)}
 
         self.gravity_model = None
         if self.params.gravity_compensation.enable and not self.params.gravity_compensation.model_path:
@@ -55,7 +58,23 @@ class PdGControllerNode(Node):
             )
 
         self.measured_positions = {}
+        self.measured_efforts = {}
         self.latest_setpoint = None
+
+        self.external_torque_publisher = None
+        if self.params.external_torque_estimation.enable:
+            if self.gravity_model is None:
+                raise RuntimeError(
+                    "external_torque_estimation.enable is true but no gravity model was "
+                    "loaded (gravity_compensation.model_path is empty). Set it to a "
+                    "MuJoCo .xml or a .urdf/.xacro model file."
+                )
+            self.external_torque_publisher = self.create_publisher(
+                JointState, self.params.external_torque_estimation.output_topic, 1
+            )
+            self.external_torque_timer = self.create_timer(
+                1.0 / self.params.control_rate, self._publish_external_torque
+            )
 
         self.publisher = self.create_publisher(MoveMITMsg, self.params.output_topic, 1)
         self.feedback_subscription = self.create_subscription(
@@ -77,6 +96,29 @@ class PdGControllerNode(Node):
     def _feedback_callback(self, msg: JointState) -> None:
         for name, position in zip(msg.name, msg.position):
             self.measured_positions[name] = position
+        if len(msg.effort) == len(msg.name):
+            for name, effort in zip(msg.name, msg.effort):
+                self.measured_efforts[name] = effort
+
+    def _external_torques(self):
+        """Per-joint external torque estimate (measured - MuJoCo gravity), or None if not ready."""
+        try:
+            qpos = [self.measured_positions[name] for name in self.params.joints]
+            measured = [self.measured_efforts[name] for name in self.params.joints]
+        except KeyError:
+            return None
+        gravity = self.gravity_model.raw_gravity_torque(qpos)
+        return [m - g for m, g in zip(measured, gravity)]
+
+    def _publish_external_torque(self) -> None:
+        tau_ext = self._external_torques()
+        if tau_ext is None:
+            return
+        msg = JointState()
+        msg.name = list(self.params.joints)
+        msg.position = [self.measured_positions[name] for name in self.params.joints]
+        msg.effort = list(tau_ext)
+        self.external_torque_publisher.publish(msg)
 
     def _gravity_torques(self):
         """Per-joint gravity torque dict, or None if it cannot be computed yet."""
@@ -118,6 +160,7 @@ class PdGControllerNode(Node):
                 return
 
         has_velocity = len(msg.velocity) == len(msg.name)
+        has_effort = len(msg.effort) == len(msg.name)
 
         out = MoveMITMsg()
         for i, name in enumerate(msg.name):
@@ -129,6 +172,11 @@ class PdGControllerNode(Node):
             torque = gains.feedforward_torque
             if gravity_torques is not None:
                 torque += gravity_torques[name]
+            if self.params.remote_force_feedforward.enable and has_effort:
+                scale = self.params.remote_force_feedforward.torque_scaling[
+                    self.joint_list_index[name]
+                ]
+                torque += msg.effort[i] * scale
 
             out.joint_index.append(joint_index)
             out.p_des.append(msg.position[i])

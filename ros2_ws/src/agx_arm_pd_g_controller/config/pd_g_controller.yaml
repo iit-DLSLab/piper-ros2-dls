@@ -27,3 +27,11 @@
       # amplifies MIT torque commands on those joints by 4x. Use 1.0 everywhere
       # on newer firmware (see README).
       torque_scaling: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+    external_torque_estimation:
+      enable: true
+      output_topic: "feedback/external_torque"
+    remote_force_feedforward:
+      enable: false
+      # Same firmware-amplification correction as gravity_compensation.torque_scaling
+      # above, since this value is also sent as a commanded torque.
+      torque_scaling: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]

@@ -55,3 +55,21 @@ pd_g_controller:
       type: double_array
       default_value: [0.25, 0.25, 0.25, 1.0, 1.0, 1.0]
       description: "Per-joint scaling applied to the raw MuJoCo gravity torque when no calibration file is given. The 0.25 default on joints 1-3 matches Piper firmware <= 1.8.post2, which amplifies MIT torque commands on those joints by 4x; use 1.0 everywhere on newer firmware (see README)."
+  external_torque_estimation:
+    enable:
+      type: bool
+      default_value: false
+      description: "Publish a per-joint external torque estimate (measured motor torque minus MuJoCo-predicted gravity torque) on output_topic. Requires gravity_compensation.model_path to be set."
+    output_topic:
+      type: string
+      default_value: "feedback/external_torque"
+      description: "sensor_msgs/msg/JointState topic to publish the external torque estimate on (in the effort field)."
+  remote_force_feedforward:
+    enable:
+      type: bool
+      default_value: false
+      description: "Add input_topic's effort field (e.g. a remote arm's external torque estimate, cross-fed by a bilateral teleoperation node) to each joint's commanded torque, scaled by torque_scaling."
+    torque_scaling:
+      type: double_array
+      default_value: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+      description: "Per-joint scaling applied to input_topic's effort field before adding it to the commanded torque. Independent of gravity_compensation.torque_scaling, but corrects for the same Piper firmware <= 1.8.post2 4x MIT command amplification on joints 1-3 (see README) since this value is also sent as a commanded torque."
