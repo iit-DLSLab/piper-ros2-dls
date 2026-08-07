@@ -14,7 +14,7 @@ import os
 import tempfile
 import xml.etree.ElementTree as ET
 from collections import Counter
-from typing import Callable, Dict, Optional
+from typing import Callable, Dict, Optional, Sequence
 
 import mujoco
 import numpy as np
@@ -89,6 +89,7 @@ def load_mujoco_model(
     add_ground_plane: bool = False,
     ground_height: float = 0.0,
     walls: Optional[Dict[str, Optional[float]]] = None,
+    weld_joints_except: Optional[Sequence[str]] = None,
 ) -> mujoco.MjModel:
     """Load a MuJoCo model from a .xml (MJCF), .urdf, or .xacro file.
 
@@ -103,11 +104,16 @@ def load_mujoco_model(
     coordinate along that axis (None or omitted disables that side). Sides are
     independent, so the box need not be symmetric. Like the ground plane, the
     base link is welded to the world and excluded from wall contacts.
+
+    weld_joints_except, if given, rigidly welds every joint whose name is not
+    in the sequence (e.g. gripper fingers when only the arm joints are being
+    controlled/observed) to its parent body, at that joint's reference (zero)
+    position. See _weld_joints_except.
     """
     extension = os.path.splitext(model_path)[1].lower()
 
     if extension == ".xml":
-        return _compile_spec(model_path, add_ground_plane, ground_height, walls)
+        return _compile_spec(model_path, add_ground_plane, ground_height, walls, weld_joints_except)
 
     if extension == ".xacro":
         import xacro
@@ -129,9 +135,41 @@ def load_mujoco_model(
         f.write(processed)
         tmp_path = f.name
     try:
-        return _compile_spec(tmp_path, add_ground_plane, ground_height, walls)
+        return _compile_spec(tmp_path, add_ground_plane, ground_height, walls, weld_joints_except)
     finally:
         os.unlink(tmp_path)
+
+
+def _weld_joints_except(spec, keep_joint_names: Sequence[str]) -> None:
+    """Rigidly weld every joint not in keep_joint_names to its parent body.
+
+    Removes each such joint from the spec entirely (which fixes it at its
+    reference/zero position - e.g. a gripper's fingers get welded closed
+    rather than at whatever position they last held), along with anything
+    that would otherwise dangle-reference it: equality constraints,
+    actuators, and sensors.
+    """
+    keep = set(keep_joint_names)
+    to_weld = [joint for joint in spec.joints if joint.name not in keep]
+    if not to_weld:
+        return
+    weld_names = {joint.name for joint in to_weld}
+
+    for equality in list(spec.equalities):
+        if equality.name1 in weld_names or equality.name2 in weld_names:
+            spec.delete(equality)
+    for actuator in list(spec.actuators):
+        if actuator.target in weld_names:
+            spec.delete(actuator)
+    for sensor in list(spec.sensors):
+        if getattr(sensor, "objname", None) in weld_names:
+            spec.delete(sensor)
+    # Keyframes record qpos/qvel for every DOF in the model; welding changes
+    # that count, so any saved keyframe would otherwise fail to compile.
+    for key in list(spec.keys):
+        spec.delete(key)
+    for joint in to_weld:
+        spec.delete(joint)
 
 
 def _add_wall(
@@ -167,6 +205,7 @@ def _compile_spec(
     add_ground_plane: bool,
     ground_height: float,
     walls: Optional[Dict[str, Optional[float]]] = None,
+    weld_joints_except: Optional[Sequence[str]] = None,
 ) -> mujoco.MjModel:
     spec = mujoco.MjSpec.from_file(path)
     if add_ground_plane:
@@ -181,6 +220,8 @@ def _compile_spec(
         if key not in _WALL_SIDES:
             raise ValueError(f"Unknown wall key '{key}'. Expected one of {list(_WALL_SIDES)}.")
         _add_wall(spec, key, distance)
+    if weld_joints_except is not None:
+        _weld_joints_except(spec, weld_joints_except)
     return spec.compile()
 
 

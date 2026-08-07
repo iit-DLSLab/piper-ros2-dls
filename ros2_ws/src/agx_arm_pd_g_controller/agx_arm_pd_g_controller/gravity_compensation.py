@@ -39,8 +39,11 @@ class GravityCompensationModel:
         calibration_path: Optional[str] = None,
         torque_scaling: Optional[Sequence[float]] = None,
         package_resolver: Optional[Callable[[str], str]] = None,
+        weld_joints_except: Optional[Sequence[str]] = None,
     ):
-        self.model = load_mujoco_model(model_path, package_resolver)
+        self.model = load_mujoco_model(
+            model_path, package_resolver, weld_joints_except=weld_joints_except
+        )
         self.data = mujoco.MjData(self.model)
         self.joint_names = tuple(joint_names)
 

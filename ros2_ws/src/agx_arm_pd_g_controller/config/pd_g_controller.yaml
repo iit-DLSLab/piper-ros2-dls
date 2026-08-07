@@ -18,7 +18,7 @@
       joint5: {kp: 3.0, kd: 0.4, feedforward_torque: 0.0}
       joint6: {kp: 2.0, kd: 0.4, feedforward_torque: 0.0}
     gravity_compensation:
-      enable: false
+      enable: true
       # model_path and calibration_path are normally set by the launch file
       # (use_gripper / model_file / calibration_file arguments).
       model_path: ""
@@ -30,6 +30,8 @@
     external_torque_estimation:
       enable: true
       output_topic: "feedback/external_torque"
+      method: "momentum_observer"
+      momentum_observer_gain: [10.0, 10.0, 10.0, 10.0, 10.0, 10.0]
     remote_force_feedforward:
       enable: false
       # Same firmware-amplification correction as gravity_compensation.torque_scaling

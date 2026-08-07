@@ -68,6 +68,7 @@ class PdGControllerNode(Node):
         self.last_command = {}
 
         self.external_torque_publisher = None
+        self.momentum_observer = None
         if self.params.external_torque_estimation.enable:
             if self.gravity_model is None:
                 raise RuntimeError(
@@ -75,11 +76,36 @@ class PdGControllerNode(Node):
                     "loaded (gravity_compensation.model_path is empty). Set it to a "
                     "MuJoCo .xml or a .urdf/.xacro model file."
                 )
+            if self.params.external_torque_estimation.method == "momentum_observer":
+                from agx_arm_pd_g_controller.gravity_compensation import GravityCompensationModel
+                from agx_arm_pd_g_controller.momentum_observer import MomentumObserver
+
+                # The momentum observer reconstructs the full dynamics from the
+                # mass matrix and bias force, which are constraint-unaware, so it
+                # needs a model containing only the controlled joints - load a
+                # separate instance with any other joints (e.g. a gripper's,
+                # possibly linked by an equality constraint) welded shut, rather
+                # than reusing gravity_model's (unwelded) model.
+                momentum_observer_model = GravityCompensationModel(
+                    model_path=self.params.gravity_compensation.model_path,
+                    joint_names=self.params.joints,
+                    weld_joints_except=self.params.joints,
+                )
+                self.momentum_observer = MomentumObserver(
+                    model=momentum_observer_model.model,
+                    qpos_indices=momentum_observer_model.qpos_indices,
+                    qvel_indices=momentum_observer_model.qvel_indices,
+                    gain=self.params.external_torque_estimation.momentum_observer_gain,
+                )
             self.external_torque_publisher = self.create_publisher(
                 JointState, self.params.external_torque_estimation.output_topic, 1
             )
             self.external_torque_timer = self.create_timer(
                 1.0 / self.params.control_rate, self._publish_external_torque
+            )
+            self.get_logger().info(
+                f"External torque estimation ('{self.params.external_torque_estimation.method}') "
+                f"-> '{self.params.external_torque_estimation.output_topic}'"
             )
 
         self.publisher = self.create_publisher(MoveMITMsg, self.params.output_topic, 1)
@@ -109,18 +135,42 @@ class PdGControllerNode(Node):
             for name, effort in zip(msg.name, msg.effort):
                 self.measured_efforts[name] = effort
 
+    def _commanded_torques(self, qpos, qvel):
+        """Best available reconstruction of the total actuator torque, per joint.
+
+        Uses the last MIT command actually sent (kp*(p_des-p)+kd*(v_des-v)+t_ff,
+        the firmware's own tracking law) so it isn't misread as external torque.
+        Falls back to gravity alone before the first command has been sent for
+        a joint (e.g. before the first setpoint, or during move_j-based homing).
+        """
+        gravity = self.gravity_model.raw_gravity_torque(qpos)
+        commanded = []
+        for i, name in enumerate(self.params.joints):
+            command = self.last_command.get(name)
+            if command is None:
+                commanded.append(gravity[i])
+            else:
+                commanded.append(
+                    command["kp"] * (command["p_des"] - qpos[i])
+                    + command["kd"] * (command["v_des"] - qvel[i])
+                    + command["torque"]
+                )
+        return commanded
+
     def _external_torques(self):
         """Per-joint external torque estimate, or None if not ready.
 
         measured_effort is the *total* motor torque, which includes whatever
-        the MIT firmware's own kp*(p_des-p)+kd*(v_des-v)+t_ff law is actively
-        commanding to track the last-sent reference - not just gravity and
-        contact. Subtracting only gravity would misattribute that tracking
-        effort (e.g. while chasing a moving reference) to external contact.
-        Reconstruct and subtract the full last-commanded torque instead; if no
-        MIT command has been sent yet for a joint (e.g. before the first
-        setpoint, or during a move_j-based homing phase), fall back to
-        subtracting gravity alone.
+        the MIT firmware's own tracking law is actively commanding to chase the
+        last-sent reference - not just gravity and contact. With method
+        'commanded_torque_diff', that reconstructed commanded torque is simply
+        subtracted from measured_effort; this is cheap but, during motion,
+        conflates genuine inertial/Coriolis torque (needed to actually move the
+        arm) with external contact torque, since it has no dynamic model of the
+        arm's own motion. With method 'momentum_observer', the same commanded
+        torque instead drives a De Luca generalized-momentum residual filter
+        (see momentum_observer.py) that correctly separates inertial/Coriolis
+        torque from external torque using MuJoCo's mass matrix and bias force.
         """
         try:
             qpos = [self.measured_positions[name] for name in self.params.joints]
@@ -128,20 +178,17 @@ class PdGControllerNode(Node):
             measured = [self.measured_efforts[name] for name in self.params.joints]
         except KeyError:
             return None
-        gravity = self.gravity_model.raw_gravity_torque(qpos)
-        tau_ext = []
-        for i, name in enumerate(self.params.joints):
-            command = self.last_command.get(name)
-            if command is None:
-                commanded_torque = gravity[i]
-            else:
-                commanded_torque = (
-                    command["kp"] * (command["p_des"] - qpos[i])
-                    + command["kd"] * (command["v_des"] - qvel[i])
-                    + command["torque"]
+
+        commanded = self._commanded_torques(qpos, qvel)
+
+        if self.momentum_observer is not None:
+            return list(
+                self.momentum_observer.update(
+                    qpos, qvel, commanded, 1.0 / self.params.control_rate
                 )
-            tau_ext.append(measured[i] - commanded_torque)
-        return tau_ext
+            )
+
+        return [m - c for m, c in zip(measured, commanded)]
 
     def _publish_external_torque(self) -> None:
         tau_ext = self._external_torques()
