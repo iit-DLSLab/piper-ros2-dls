@@ -69,6 +69,7 @@ class PdGControllerNode(Node):
 
         self.external_torque_publisher = None
         self.momentum_observer = None
+        self.residual_filter = None
         if self.params.external_torque_estimation.enable:
             if self.gravity_model is None:
                 raise RuntimeError(
@@ -96,6 +97,20 @@ class PdGControllerNode(Node):
                     qpos_indices=momentum_observer_model.qpos_indices,
                     qvel_indices=momentum_observer_model.qvel_indices,
                     gain=self.params.external_torque_estimation.momentum_observer_gain,
+                )
+            if self.params.external_torque_estimation.residual_filter_hz > 0.0:
+                from agx_arm_pd_g_controller.residual_filter import LowPassFilter
+
+                cutoff = self.params.external_torque_estimation.residual_filter_hz
+                self.residual_filter = LowPassFilter(
+                    cutoff_hz=cutoff,
+                    sample_rate_hz=self.params.control_rate,
+                    n_channels=len(self.params.joints),
+                )
+                self.get_logger().info(
+                    f"External torque estimate low-passed at {cutoff:.1f} Hz "
+                    f"(gain {self.residual_filter.gain_at(15.5):.3f} at 15.5 Hz, "
+                    f"{self.residual_filter.gain_at(1.0):.3f} at 1 Hz)"
                 )
             self.external_torque_publisher = self.create_publisher(
                 JointState, self.params.external_torque_estimation.output_topic, 1
@@ -140,8 +155,12 @@ class PdGControllerNode(Node):
 
         Uses the last MIT command actually sent (kp*(p_des-p)+kd*(v_des-v)+t_ff,
         the firmware's own tracking law) so it isn't misread as external torque.
-        Falls back to gravity alone before the first command has been sent for
-        a joint (e.g. before the first setpoint, or during move_j-based homing).
+        gains.kp/kd are scaled by firmware_gain_scaling before use, since the
+        firmware empirically applies its own internal multiplier to them (see
+        README) - using the unscaled values here would misattribute the
+        resulting real-vs-assumed torque gap to external contact. Falls back
+        to gravity alone before the first command has been sent for a joint
+        (e.g. before the first setpoint, or during move_j-based homing).
         """
         gravity = self.gravity_model.raw_gravity_torque(qpos)
         commanded = []
@@ -150,9 +169,12 @@ class PdGControllerNode(Node):
             if command is None:
                 commanded.append(gravity[i])
             else:
+                scale = self.joint_list_index[name]
+                kp = command["kp"] * self.params.firmware_gain_scaling.kp[scale]
+                kd = command["kd"] * self.params.firmware_gain_scaling.kd[scale]
                 commanded.append(
-                    command["kp"] * (command["p_des"] - qpos[i])
-                    + command["kd"] * (command["v_des"] - qvel[i])
+                    kp * (command["p_des"] - qpos[i])
+                    + kd * (command["v_des"] - qvel[i])
                     + command["torque"]
                 )
         return commanded
@@ -170,7 +192,9 @@ class PdGControllerNode(Node):
         arm's own motion. With method 'momentum_observer', the same commanded
         torque instead drives a De Luca generalized-momentum residual filter
         (see momentum_observer.py) that correctly separates inertial/Coriolis
-        torque from external torque using MuJoCo's mass matrix and bias force.
+        torque from external torque using MuJoCo's mass matrix and bias force -
+        fed either that reconstruction or measured_effort itself, per
+        external_torque_estimation.torque_source.
         """
         try:
             qpos = [self.measured_positions[name] for name in self.params.joints]
@@ -182,9 +206,20 @@ class PdGControllerNode(Node):
         commanded = self._commanded_torques(qpos, qvel)
 
         if self.momentum_observer is not None:
+            # The observer wants the torque the actuator actually applied. The
+            # reconstruction is only a proxy for it, and a poor one on joints
+            # 1-3: the firmware applies its own multiplier to kp/kd (~25x, see
+            # models/README.md), so with
+            # firmware_gain_scaling at 1.0 the reconstruction understates them
+            # badly. 'measured' sidesteps the whole question.
+            torque = (
+                measured
+                if self.params.external_torque_estimation.torque_source == "measured"
+                else commanded
+            )
             return list(
                 self.momentum_observer.update(
-                    qpos, qvel, commanded, 1.0 / self.params.control_rate
+                    qpos, qvel, torque, 1.0 / self.params.control_rate
                 )
             )
 
@@ -194,6 +229,11 @@ class PdGControllerNode(Node):
         tau_ext = self._external_torques()
         if tau_ext is None:
             return
+        if self.residual_filter is not None:
+            # Filter here rather than inside the observer: this way both
+            # estimation methods get it, and the observer's own residual stays
+            # untouched for anyone reading it directly.
+            tau_ext = list(self.residual_filter(tau_ext))
         msg = JointState()
         msg.name = list(self.params.joints)
         msg.position = [self.measured_positions[name] for name in self.params.joints]

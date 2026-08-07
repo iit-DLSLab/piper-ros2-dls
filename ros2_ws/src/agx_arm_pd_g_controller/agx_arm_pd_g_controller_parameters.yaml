@@ -38,6 +38,19 @@ pd_g_controller:
         type: double
         default_value: 0.0
         description: "MIT-mode feed-forward torque added for this joint (on top of gravity compensation, if enabled)."
+  firmware_gain_scaling:
+    kp:
+      type: double_array
+      default_value: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+      description: "Per-joint correction multiplier for gains.kp, applied only when reconstructing the commanded torque for external_torque_estimation (a mismatch there gets misread as external torque). The firmware does apply its own multiplier to kp on joints 1-3, so the reconstruction understates them at 1.0; external_torque_estimation.torque_source: measured avoids the question entirely."
+      validation:
+        lower_element_bounds<>: [0.0]
+    kd:
+      type: double_array
+      default_value: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+      description: "Per-joint correction multiplier for gains.kd, applied only when reconstructing the commanded torque for external_torque_estimation (a mismatch there gets misread as external torque). The firmware does apply its own multiplier to kd on joints 1-3, so the reconstruction understates them at 1.0; external_torque_estimation.torque_source: measured avoids the question entirely."
+      validation:
+        lower_element_bounds<>: [0.0]
   gravity_compensation:
     enable:
       type: bool
@@ -67,7 +80,7 @@ pd_g_controller:
     method:
       type: string
       default_value: "commanded_torque_diff"
-      description: "Estimation method. 'commanded_torque_diff': measured motor torque minus the last commanded MIT torque (kp*(p_des-q)+kd*(v_des-q_dot)+t_ff), falling back to MuJoCo gravity torque alone before the first command. Cheap, but during motion conflates genuine inertial/Coriolis torque with external torque since it has no dynamic model of the arm's own motion. 'momentum_observer': De Luca generalized-momentum residual filter using MuJoCo's mass matrix and bias force, correctly separating inertial/Coriolis torque from external torque and low-pass filtering the result; needs an accurate M(q) (this model's inertia tensors are not identified, only mass/COM, so accuracy is limited until they are). Uses the skew-symmetry property (M_dot=C+C^T) to get C^T(q,q_dot)*q_dot exactly, finite-differencing the mass matrix between control steps for M_dot*q_dot (error O(dt), shrinking with control_rate) rather than approximating C^T with C."
+      description: "Estimation method. 'commanded_torque_diff': measured motor torque minus the last commanded MIT torque, falling back to MuJoCo gravity torque before the first command. Cheap, but during motion conflates inertial/Coriolis torque with external torque. 'momentum_observer': De Luca generalized-momentum residual filter using MuJoCo's mass matrix and bias force, which separates them correctly and low-pass filters the result; needs an accurate M(q)."
       validation:
         one_of<>: [["commanded_torque_diff", "momentum_observer"]]
     momentum_observer_gain:
@@ -76,6 +89,18 @@ pd_g_controller:
       description: "Per-joint K_I gain (1/s) of the momentum-observer residual filter, ordered like joints. Sets the filter's time constant (1/K_I): higher is faster to respond but noisier, lower is smoother but slower. Only used when method is 'momentum_observer'."
       validation:
         lower_element_bounds<>: [0.0]
+    residual_filter_hz:
+      type: double
+      default_value: 0.0
+      description: "Cutoff [Hz] of a second-order Butterworth low-pass on the published external torque estimate; 0 disables it. Above the arm's ~15-19 Hz structural resonance the rigid-body model stops holding and the residual degenerates into a phantom torque proportional to velocity, which acts as negative damping when force-reflected. 5.0 Hz attenuates it 10-15x for ~45 ms of added delay, leaving the contact band untouched. Preferred over lowering momentum_observer_gain, which trades attenuation against contact latency 1:1."
+      validation:
+        bounds<>: [0.0, 100.0]
+    torque_source:
+      type: string
+      default_value: "commanded"
+      description: "Which actuator torque drives the momentum observer. 'commanded': the reconstruction kp*(p_des-q)+kd*(v_des-q_dot)+t_ff from the last MIT command, scaled by firmware_gain_scaling. 'measured': feedback/joint_states' effort field. 'measured' needs no assumption about the firmware's gain handling, which matters because the reconstruction understates joints 1-3 by roughly 25x with firmware_gain_scaling at 1.0; it tracks contact better while moving, while 'commanded' is quieter at rest. Only used when method is 'momentum_observer'."
+      validation:
+        one_of<>: [["commanded", "measured"]]
   remote_force_feedforward:
     enable:
       type: bool

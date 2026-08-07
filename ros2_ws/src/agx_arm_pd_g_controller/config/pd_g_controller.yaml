@@ -14,24 +14,36 @@
       joint1: {kp: 1.0, kd: 0.4, feedforward_torque: 0.0}
       joint2: {kp: 1.5, kd: 0.4, feedforward_torque: 0.0}
       joint3: {kp: 1.5, kd: 0.25, feedforward_torque: 0.0}
-      joint4: {kp: 3.0, kd: 0.4, feedforward_torque: 0.0}
-      joint5: {kp: 3.0, kd: 0.4, feedforward_torque: 0.0}
-      joint6: {kp: 2.0, kd: 0.4, feedforward_torque: 0.0}
+      joint4: {kp: 10.0, kd: 0.4, feedforward_torque: 0.0}
+      joint5: {kp: 10.0, kd: 0.4, feedforward_torque: 0.0}
+      joint6: {kp: 10.0, kd: 0.4, feedforward_torque: 0.0}
+    # Correction applied to gains.kp/kd only when reconstructing the commanded
+    # torque for external_torque_estimation. See README.
+    firmware_gain_scaling:
+      kp: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+      kd: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
     gravity_compensation:
       enable: true
-      # model_path and calibration_path are normally set by the launch file
-      # (use_gripper / model_file / calibration_file arguments).
+      # Set by the launch file, which overrides whatever is written here:
+      # it defaults to models/<robot_model>_identified_no_spacer.xml. Set
+      # model_path explicitly only when running the node without the launch file.
       model_path: ""
       calibration_path: ""
-      # 0.25 on joints 1-3 is correct for Piper firmware <= 1.8.post2, which
-      # amplifies MIT torque commands on those joints by 4x. Use 1.0 everywhere
-      # on newer firmware (see README).
+      # 0.25 on joints 1-3 for Piper firmware <= 1.8.post2; 1.0 on newer.
       torque_scaling: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
     external_torque_estimation:
       enable: true
       output_topic: "feedback/external_torque"
       method: "momentum_observer"
       momentum_observer_gain: [10.0, 10.0, 10.0, 10.0, 10.0, 10.0]
+      # "commanded" (MIT reconstruction) or "measured" (joint_states effort).
+      # "measured" needs no firmware-gain assumption and tracks contact better
+      # while moving; "commanded" is quieter at rest.
+      torque_source: "measured"
+      # Second-order Butterworth low-pass on the published estimate; 0 disables.
+      # Suppresses the phantom torque the rigid-body model produces above the
+      # arm's ~15-19 Hz resonance, which destabilised force-reflected teleop.
+      residual_filter_hz: 5.0
     remote_force_feedforward:
       enable: false
       # Same firmware-amplification correction as gravity_compensation.torque_scaling
