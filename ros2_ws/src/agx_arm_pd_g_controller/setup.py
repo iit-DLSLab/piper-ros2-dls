@@ -38,13 +38,11 @@ setup(
         'Programming Language :: Python',
         'Topic :: Software Development',
     ],
-    description='Joint-space PD+G controller for the AgileX Piper arm: tracks JointState references via MoveMITMsg with optional MuJoCo-based gravity compensation and a gravity calibration procedure.',
+    description='Joint-space PD+G controller for the AgileX Piper arm: tracks JointState references via MoveMITMsg with optional MuJoCo-based gravity compensation and external torque estimation.',
     license='MIT',
     entry_points={
         'console_scripts': [
             'pd_g_controller_node = agx_arm_pd_g_controller.pd_g_controller_node:main',
-            'gravity_calibration_node = agx_arm_pd_g_controller.gravity_calibration_node:main',
-            'fit_calibration = agx_arm_pd_g_controller.fit_calibration:main',
             'friction_hysteresis_check_node = agx_arm_pd_g_controller.friction_hysteresis_check_node:main',
         ],
     },

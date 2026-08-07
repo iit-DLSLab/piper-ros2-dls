@@ -2,12 +2,9 @@
 
 The raw gravity torque is MuJoCo's ``qfrc_bias`` evaluated at the measured
 joint configuration (zero velocity, so it reduces to the gravity term). The
-raw torque is then mapped per joint to a command torque, either with:
-- a fitted polynomial from a calibration YAML produced by the gravity
-  calibration procedure (see calibration.py), or
-- a plain per-joint scaling ("direct" mode, defaults to 1.0). Note: Piper
-  firmware <= 1.8.post2 amplifies MIT torque commands on joints 1-3 by 4x;
-  the controller's parameter YAML sets 0.25 there. See the package README.
+raw torque is then scaled per joint (defaults to 1.0). Note: Piper firmware
+<= 1.8.post2 amplifies MIT torque commands on joints 1-3 by 4x; the
+controller's parameter YAML sets 0.25 there. See the package README.
 
 Ported from https://github.com/Reimagine-Robotics/piper_control.
 """
@@ -36,7 +33,6 @@ class GravityCompensationModel:
         self,
         model_path: str,
         joint_names: Sequence[str] = DEFAULT_JOINT_NAMES,
-        calibration_path: Optional[str] = None,
         torque_scaling: Optional[Sequence[float]] = None,
         package_resolver: Optional[Callable[[str], str]] = None,
         weld_joints_except: Optional[Sequence[str]] = None,
@@ -72,32 +68,6 @@ class GravityCompensationModel:
             )
         self._torque_scaling = np.asarray(torque_scaling, dtype=float)
 
-        self._calibration_coeffs = None
-        if calibration_path:
-            self._calibration_coeffs = self._load_calibration(calibration_path)
-
-    def _load_calibration(self, calibration_path: str) -> list:
-        from agx_arm_pd_g_controller.calibration import load_calibration
-
-        if not os.path.isfile(calibration_path):
-            raise FileNotFoundError(
-                f"Gravity calibration file not found: {calibration_path}"
-            )
-        calibration = load_calibration(calibration_path)
-        missing = [n for n in self.joint_names if n not in calibration["joints"]]
-        if missing:
-            raise ValueError(
-                f"Calibration file '{calibration_path}' has no entry for joints "
-                f"{missing}."
-            )
-        return [
-            np.asarray(calibration["joints"][name]["coeffs"], dtype=float)
-            for name in self.joint_names
-        ]
-
-    @property
-    def calibrated(self) -> bool:
-        return self._calibration_coeffs is not None
 
     def raw_gravity_torque(self, qpos: Sequence[float]) -> np.ndarray:
         """MuJoCo gravity torque (qfrc_bias at zero velocity) for the arm joints."""
@@ -107,12 +77,4 @@ class GravityCompensationModel:
 
     def predict(self, qpos: Sequence[float]) -> np.ndarray:
         """Command torques compensating gravity at the given configuration."""
-        raw_tau = self.raw_gravity_torque(qpos)
-        if self._calibration_coeffs is not None:
-            return np.asarray(
-                [
-                    np.polyval(coeffs, tau)
-                    for coeffs, tau in zip(self._calibration_coeffs, raw_tau)
-                ]
-            )
-        return raw_tau * self._torque_scaling
+        return self.raw_gravity_torque(qpos) * self._torque_scaling

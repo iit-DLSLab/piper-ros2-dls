@@ -61,8 +61,6 @@ def launch_setup(context):
                     context.launch_configurations['enable_gravity_compensation'].lower()
                     in ('true', '1'),
                 'gravity_compensation.model_path': resolve_model_path(context),
-                'gravity_compensation.calibration_path':
-                    context.launch_configurations['calibration_file'],
             },
         ],
     )
@@ -108,12 +106,6 @@ def generate_launch_description():
             'enable_gravity_compensation',
             default_value='false',
             description='Enable MuJoCo-based gravity compensation.',
-        ),
-        DeclareLaunchArgument(
-            'calibration_file',
-            default_value='',
-            description='Gravity calibration YAML produced by gravity_calibration.launch.py. '
-                        'Empty: use the torque_scaling parameter instead.',
         ),
         OpaqueFunction(function=launch_setup),
     ])

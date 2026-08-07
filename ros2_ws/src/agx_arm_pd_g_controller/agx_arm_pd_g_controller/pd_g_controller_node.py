@@ -45,16 +45,11 @@ class PdGControllerNode(Node):
             self.gravity_model = GravityCompensationModel(
                 model_path=self.params.gravity_compensation.model_path,
                 joint_names=self.params.joints,
-                calibration_path=self.params.gravity_compensation.calibration_path or None,
                 torque_scaling=self.params.gravity_compensation.torque_scaling,
             )
             self.get_logger().info(
                 f"Gravity model loaded from '{self.params.gravity_compensation.model_path}' "
-                + (
-                    f"with calibration '{self.params.gravity_compensation.calibration_path}'"
-                    if self.gravity_model.calibrated
-                    else f"with direct torque scaling {list(self.params.gravity_compensation.torque_scaling)}"
-                )
+                f"with torque scaling {list(self.params.gravity_compensation.torque_scaling)}"
             )
 
         self.measured_positions = {}

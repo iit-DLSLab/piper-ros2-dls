@@ -6,7 +6,7 @@ can import them directly:
   visuals are irrelevant for gravity computation),
 - package://<pkg>/... mesh URIs in <collision> elements are rewritten to
   absolute paths (collision geoms are kept so configurations can be
-  collision-checked during gravity calibration),
+  collision-checked),
 - a <mujoco><compiler .../></mujoco> extension element is injected.
 """
 

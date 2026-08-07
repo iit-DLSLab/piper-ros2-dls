@@ -100,6 +100,29 @@ from flange + moved gripper, and the gripper base geom and both fingers are
 shifted by the same amount. Total mass drops by exactly 17.0 g and the fingers
 return to their pre-spacer position.
 
+### 4. Firmware gain multipliers
+
+Identified from the same bags, as a by-product rather than as part of the
+model: the firmware does not apply the MIT `kp`/`kd` it is sent. Regressing
+`effort` on the command terms with the feedforward pinned at unity, over the
+two excitation-rich bags (R² 0.85–0.96):
+
+| joint | `kp` multiplier | `kd` multiplier |
+|---|---|---|
+| joint1 | 23.9 ± 0.5 | 17.4 ± 0.2 |
+| joint2 | 22.5 ± 1.4 | 19.7 ± 0.2 |
+| joint3 | 20.4 ± 0.4 | 18.7 ± 0.3 |
+| joint4 | 1.3 ± 0.2 | 0.7 ± 0.1 |
+| joint5 | 1.5 ± 0.1 | 1.1 ± 0.0 |
+| joint6 | 1.5 ± 0.3 | 0.4 ± 0.1 |
+
+These are what `firmware_gain_scaling` is set to in the controller config.
+They are not used in fitting the models — `effort` is the fit target precisely
+so that no gain assumption enters. Joint2's value is only identifiable on bags
+with strong excitation: on the hold bags the feedforward term carries most of
+the torque and correlates with the pose error at ρ = 0.6–0.7, the fit goes
+collinear, and the estimate ranges from −1 to +24 with R² collapsing to 0.01.
+
 ## Results
 
 Torque-prediction RMS, Nm pooled over joints, against the previously used model:

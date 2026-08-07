@@ -17,18 +17,19 @@
       joint4: {kp: 10.0, kd: 0.4, feedforward_torque: 0.0}
       joint5: {kp: 10.0, kd: 0.4, feedforward_torque: 0.0}
       joint6: {kp: 10.0, kd: 0.4, feedforward_torque: 0.0}
-    # Correction applied to gains.kp/kd only when reconstructing the commanded
-    # torque for external_torque_estimation. See README.
+    # Multipliers the firmware applies to gains.kp/kd, measured on this arm
+    # (see models/README.md). Used only to reconstruct the commanded torque for
+    # external_torque_estimation, so they have no effect while torque_source is
+    # "measured".
     firmware_gain_scaling:
-      kp: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
-      kd: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+      kp: [23.9, 22.5, 20.4, 1.3, 1.5, 1.5]
+      kd: [17.4, 19.7, 18.7, 0.7, 1.1, 0.4]
     gravity_compensation:
       enable: true
       # Set by the launch file, which overrides whatever is written here:
       # it defaults to models/<robot_model>_identified_no_spacer.xml. Set
       # model_path explicitly only when running the node without the launch file.
       model_path: ""
-      calibration_path: ""
       # 0.25 on joints 1-3 for Piper firmware <= 1.8.post2; 1.0 on newer.
       torque_scaling: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
     external_torque_estimation:
