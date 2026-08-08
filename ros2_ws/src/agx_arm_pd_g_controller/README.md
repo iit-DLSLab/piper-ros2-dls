@@ -136,22 +136,35 @@ The regression pairs each command with the nearest-in-time feedback sample,
 which assumes zero command-to-effort delay. That assumption is false by
 ~12.5 ms — sweeping an explicit shift finds R² maximized there consistently
 across every joint and both bags, matching the ~15 ms lag found independently
-on the dynamics side — and left uncorrected it biases the fitted multiplier
-low by up to 50% on `kd`. The table below is fit at the located delay:
+on the dynamics side — and the zero-lag fit under-reports the arm's true
+instantaneous multiplier by up to 50% on `kd`.
 
-| joint | `kp` multiplier | `kd` multiplier |
+That true multiplier is deliberately **not** what is shipped, though. This
+parameter feeds `_commanded_torques`, which pairs the current measured state
+with the most recently *published* command — exactly the zero-lag assumption
+the uncorrected regression makes. Plugging the delay-corrected multiplier into
+that same zero-lag pairing overcorrects: measured on `multijoint_bag_2` (held
+out, free-space), the momentum-observer residual gets *worse* with the
+"more correct" gain (0.519 → 0.627 Nm pooled), and recovers to 0.543 once the
+setpoint is paired with a matching 12.5 ms delay — confirming the gap is a
+magnitude/timing mismatch, not a wrong number. `firmware_gain_scaling` is set
+to the zero-lag fit, the one self-consistent with how the code actually pairs
+its inputs:
+
+| joint | `kp` (shipped, zero-lag) | `kd` (shipped, zero-lag) |
 |---|---|---|
-| joint1 | 27.7 ± 0.2 | 25.6 ± 0.4 |
-| joint2 | 24.1 ± 0.5 | 23.6 ± 0.7 |
-| joint3 | 26.6 ± 0.7 | 24.3 ± 0.1 |
-| joint4 | 1.6 ± 0.0 | 1.2 ± 0.1 |
-| joint5 | 1.6 ± 0.0 | 1.4 ± 0.1 |
-| joint6 | 1.7 ± 0.0 | 1.1 ± 0.1 |
+| joint1 | 22.6 ± 0.6 | 15.6 ± 0.1 |
+| joint2 | 22.0 ± 1.7 | 18.5 ± 0.0 |
+| joint3 | 18.8 ± 0.4 | 17.2 ± 0.3 |
+| joint4 | 1.2 ± 0.2 | 0.6 ± 0.1 |
+| joint5 | 1.4 ± 0.1 | 0.9 ± 0.0 |
+| joint6 | 1.4 ± 0.4 | 0.3 ± 0.0 |
 
-These are set in `config/pd_g_controller.yaml`; the parameter default stays at
-`1.0` because the values are firmware- and arm-specific. They only affect the
-commanded-torque reconstruction, so they are inert while `torque_source` is
-`measured`.
+See `models/README.md` §4 for the delay-corrected values and the full
+held-out comparison. These are set in `config/pd_g_controller.yaml`; the
+parameter default stays at `1.0` because the values are firmware- and
+arm-specific. They only affect the commanded-torque reconstruction, so they
+are inert while `torque_source` is `measured`.
 
 This supersedes an earlier conclusion in this README that no such scaling
 applied, and that `dls2_piper_bridge`'s `PIPER_SCALE_KP`/`PIPER_SCALE_KD` were
