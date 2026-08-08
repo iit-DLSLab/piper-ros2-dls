@@ -42,13 +42,13 @@ pd_g_controller:
     kp:
       type: double_array
       default_value: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
-      description: "Per-joint correction multiplier for gains.kp, applied only when reconstructing the commanded torque for external_torque_estimation (a mismatch there gets misread as external torque). The firmware applies its own multiplier: measured on piper_l as [23.9, 22.5, 20.4, 1.3, 1.5, 1.5], which the shipped config sets. Default 1.0 here because the value is firmware- and arm-specific. external_torque_estimation.torque_source: measured avoids the question entirely."
+      description: "Per-joint correction multiplier for gains.kp, applied only when reconstructing the commanded torque for external_torque_estimation (a mismatch there gets misread as external torque). The firmware applies its own multiplier: measured on piper_l as [27.7, 24.1, 26.6, 1.6, 1.6, 1.7], which the shipped config sets. Default 1.0 here because the value is firmware- and arm-specific. external_torque_estimation.torque_source: measured avoids the question entirely."
       validation:
         lower_element_bounds<>: [0.0]
     kd:
       type: double_array
       default_value: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
-      description: "Per-joint correction multiplier for gains.kd, applied only when reconstructing the commanded torque for external_torque_estimation (a mismatch there gets misread as external torque). The firmware applies its own multiplier: measured on piper_l as [17.4, 19.7, 18.7, 0.7, 1.1, 0.4], which the shipped config sets. Default 1.0 here because the value is firmware- and arm-specific. external_torque_estimation.torque_source: measured avoids the question entirely."
+      description: "Per-joint correction multiplier for gains.kd, applied only when reconstructing the commanded torque for external_torque_estimation (a mismatch there gets misread as external torque). The firmware applies its own multiplier: measured on piper_l as [25.6, 23.6, 24.3, 1.2, 1.4, 1.1], which the shipped config sets. Default 1.0 here because the value is firmware- and arm-specific. external_torque_estimation.torque_source: measured avoids the question entirely."
       validation:
         lower_element_bounds<>: [0.0]
   gravity_compensation:

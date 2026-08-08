@@ -103,25 +103,86 @@ return to their pre-spacer position.
 ### 4. Firmware gain multipliers
 
 Identified from the same bags, as a by-product rather than as part of the
-model: the firmware does not apply the MIT `kp`/`kd` it is sent. Regressing
-`effort` on the command terms with the feedforward pinned at unity, over the
-two excitation-rich bags (R² 0.85–0.96):
+model: the firmware does not apply the MIT `kp`/`kd` it is sent as-is.
+
+**Strategy.** Per joint, per sample, regress
+
+```
+effort(t) = a·kp·(p_des(t) − q(t)) + b·kd·(v_des(t) − q̇(t)) + c·τ_ff(t) + d
+```
+
+against the recorded `kp`, `kd`, `p_des`, `v_des`, `τ_ff` (from `control/move_mit`)
+and measured `q`, `q̇`, `effort` (from `feedback/joint_states`) — a linear
+least-squares fit of the control law's own coefficients directly against its
+measured output, with no dynamics model anywhere in it. `c` is pinned to 1
+(the feedforward term is already in true Nm and passes through at unity; this
+also removes a regressor that is collinear with the position-error term on the
+low-excitation bags — see below) and `a`, `b` are read off as the multiplier.
+Only the two bags with strong excitation
+(`multiple_frequencies_bag_2`, `multijoint_bag_2`) are used, for the same
+collinearity reason.
+
+**Effect of command-to-effort delay.** The regression above pairs each
+`move_mit` sample with the feedback sample nearest in time. That implicitly
+assumes zero delay between commanding a joint and its effort being reported,
+which is false: sweeping an explicit time shift of `effort` relative to the
+command finds R² maximized at a consistent **+12.5 ms** across every joint and
+both bags (e.g. joint1 in `multijoint_bag_2`: R² 0.925 at 0 ms → 0.957 at
++12.5 ms), matching, independently, the ~15 ms lag `identify_linear.py` found
+and corrected for on the dynamics side. Left uncorrected, this biases the
+fitted multiplier low — by up to 50% on `kd` — because a delay between a
+control-law error signal and its measured effect always attenuates a
+zero-lag correlation between them. The table below is fit at the located
+delay.
+
+**Effect of velocity quantization.** `q̇` from `feedback/joint_states` is
+quantized at 1e-3 rad/s (the same defect that made raw-differenced
+acceleration unusable for the dynamics fit, §2). Using it instead of a
+Savitzky-Golay derivative of position changes `b` by at most 14% — real, but
+an order of magnitude smaller than the delay effect, and within the
+between-bag spread already in the table. Not corrected for, since the recorded
+`v_des − q̇` term is exactly what the firmware itself would have used.
+
+**Effect of dynamic model correctness: none.** The regression above never
+evaluates `M(q)`, gravity, armature or friction — every term in it is either a
+recorded command or a direct measurement. It is therefore unaffected by any
+error in the identified model, including all the defects in §1. This is a
+deliberate property of using measured `effort` as the target rather than, say,
+a MuJoCo-predicted torque: had the fit instead compared a *reconstructed*
+commanded torque against a *model-predicted* one, every kinematic and
+inertial defect in §1 would have leaked into the gain estimate, which is
+exactly the failure mode that produced the ~25× error the original
+(uncorrected) approach in this project's early history was built on.
+
+**Should armature/friction be identified first?** No — the two identification
+tasks are independent by construction, not just in principle: §2's dynamics
+fit and this gain fit both use measured `effort` as their target, but they
+regress it against disjoint predictor sets (rigid-body terms from `mj_inverse`
+for one, the control law's own command terms for the other), so neither result
+enters the other and there is no ordering constraint. This is why §2 needed no
+`firmware_gain_scaling` value at all to identify armature, inertia and
+friction. The one place a model *does* feed into a fit is internal to §2 itself:
+its load-dependent friction term uses the prior model's own predicted torque as
+a proxy for joint load, so that specific term (not armature/inertia/mass/COM)
+is only as good as the kinematic and inertial corrections already applied
+before it runs.
 
 | joint | `kp` multiplier | `kd` multiplier |
 |---|---|---|
-| joint1 | 23.9 ± 0.5 | 17.4 ± 0.2 |
-| joint2 | 22.5 ± 1.4 | 19.7 ± 0.2 |
-| joint3 | 20.4 ± 0.4 | 18.7 ± 0.3 |
-| joint4 | 1.3 ± 0.2 | 0.7 ± 0.1 |
-| joint5 | 1.5 ± 0.1 | 1.1 ± 0.0 |
-| joint6 | 1.5 ± 0.3 | 0.4 ± 0.1 |
+| joint1 | 27.7 ± 0.2 | 25.6 ± 0.4 |
+| joint2 | 24.1 ± 0.5 | 23.6 ± 0.7 |
+| joint3 | 26.6 ± 0.7 | 24.3 ± 0.1 |
+| joint4 | 1.6 ± 0.0 | 1.2 ± 0.1 |
+| joint5 | 1.6 ± 0.0 | 1.4 ± 0.1 |
+| joint6 | 1.7 ± 0.0 | 1.1 ± 0.1 |
 
 These are what `firmware_gain_scaling` is set to in the controller config.
 They are not used in fitting the models — `effort` is the fit target precisely
-so that no gain assumption enters. Joint2's value is only identifiable on bags
-with strong excitation: on the hold bags the feedforward term carries most of
-the torque and correlates with the pose error at ρ = 0.6–0.7, the fit goes
-collinear, and the estimate ranges from −1 to +24 with R² collapsing to 0.01.
+so that no gain assumption enters. Joint2's value (and, to a lesser extent,
+joint1/joint3's) is only identifiable on bags with strong excitation: on the
+hold bags the feedforward term carries most of the torque and correlates with
+the pose error at ρ = 0.6–0.7, the fit goes collinear, and the estimate ranges
+from −1 to +24 with R² collapsing to 0.01.
 
 ## Results
 

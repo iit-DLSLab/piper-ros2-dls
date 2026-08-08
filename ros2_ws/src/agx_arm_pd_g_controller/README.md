@@ -118,17 +118,35 @@ up by exactly the amount the reconstruction fails to count.
 ### `firmware_gain_scaling`
 
 The firmware applies its own multiplier to the MIT gains. Measured on this arm
-by regressing `feedback/joint_states.effort` on the command terms
-(feedforward pinned at unity, excitation-rich bags, R² 0.85–0.96):
+by regressing `feedback/joint_states.effort` on the command's own terms:
+
+```
+effort(t) = a·kp·(p_des(t) − q(t)) + b·kd·(v_des(t) − q̇(t)) + c·τ_ff(t) + d
+```
+
+with `c` pinned to 1 and `a`, `b` read off as the multiplier, over the two
+bags with strong excitation (R² 0.85–0.99 with the correction below). This
+regression touches no dynamics model — every term is a recorded command or a
+direct measurement — so it is unaffected by any error in the identified
+model, and it can be (and is) done independently of, and in either order
+relative to, identifying armature/inertia/friction (see
+`models/README.md` §4 for why the two are orthogonal by construction).
+
+The regression pairs each command with the nearest-in-time feedback sample,
+which assumes zero command-to-effort delay. That assumption is false by
+~12.5 ms — sweeping an explicit shift finds R² maximized there consistently
+across every joint and both bags, matching the ~15 ms lag found independently
+on the dynamics side — and left uncorrected it biases the fitted multiplier
+low by up to 50% on `kd`. The table below is fit at the located delay:
 
 | joint | `kp` multiplier | `kd` multiplier |
 |---|---|---|
-| joint1 | 23.9 ± 0.5 | 17.4 ± 0.2 |
-| joint2 | 22.5 ± 1.4 | 19.7 ± 0.2 |
-| joint3 | 20.4 ± 0.4 | 18.7 ± 0.3 |
-| joint4 | 1.3 ± 0.2 | 0.7 ± 0.1 |
-| joint5 | 1.5 ± 0.1 | 1.1 ± 0.0 |
-| joint6 | 1.5 ± 0.3 | 0.4 ± 0.1 |
+| joint1 | 27.7 ± 0.2 | 25.6 ± 0.4 |
+| joint2 | 24.1 ± 0.5 | 23.6 ± 0.7 |
+| joint3 | 26.6 ± 0.7 | 24.3 ± 0.1 |
+| joint4 | 1.6 ± 0.0 | 1.2 ± 0.1 |
+| joint5 | 1.6 ± 0.0 | 1.4 ± 0.1 |
+| joint6 | 1.7 ± 0.0 | 1.1 ± 0.1 |
 
 These are set in `config/pd_g_controller.yaml`; the parameter default stays at
 `1.0` because the values are firmware- and arm-specific. They only affect the
@@ -138,10 +156,10 @@ commanded-torque reconstruction, so they are inert while `torque_source` is
 This supersedes an earlier conclusion in this README that no such scaling
 applied, and that `dls2_piper_bridge`'s `PIPER_SCALE_KP`/`PIPER_SCALE_KD` were
 purely an interface convention. The scaling is real and roughly that size on
-joints 1–3. Note that the estimate for joint2 is only trustworthy on bags with
-strong excitation: where the feedforward term carries most of the torque and
-correlates with the pose error, the fit is collinear and returns anything
-between −1 and +24.
+joints 1–3. Note that the estimate for joint2 (and, to a lesser extent,
+joint1/joint3) is only trustworthy on bags with strong excitation: where the
+feedforward term carries most of the torque and correlates with the pose
+error, the fit is collinear and returns anything between −1 and +24.
 
 ### `residual_filter_hz`
 
