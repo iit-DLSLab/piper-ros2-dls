@@ -122,34 +122,34 @@ Only the two bags with strong excitation
 (`multiple_frequencies_bag_2`, `multijoint_bag_2`) are used, for the same
 collinearity reason.
 
-**Effect of command-to-effort delay — and why the fit is deliberately** ***not***
-**corrected for it.** The regression above pairs each `move_mit` sample with
-the feedback sample nearest in time, i.e. it assumes zero delay between
-commanding a joint and its effort being reported. That assumption is false:
-sweeping an explicit time shift of `effort` relative to the command finds R²
-maximized at a consistent **+12.5 ms** across every joint and both bags (e.g.
-joint1 in `multijoint_bag_2`: R² 0.925 at 0 ms → 0.957 at +12.5 ms), matching,
-independently, the ~15 ms lag `identify_linear.py` found and corrected for on
-the dynamics side. Left uncorrected, the zero-lag fit under-reports the arm's
-true instantaneous multiplier — by up to 50% on `kd`.
+**Command-to-effort delay — measured, and modelled rather than absorbed.**
+The naive form of the regression above pairs each `move_mit` sample with the
+feedback sample nearest in time, i.e. assumes the firmware acts on a command
+the instant it is published. It does not. Sweeping an explicit shift finds R²
+maximized at **11.5–12.0 ms**, consistently across five joints and both bags
+(joint6, whose torques are tiny, is the only noisy one). Two candidate
+structures were tested against each other:
 
-That true multiplier is *not*, however, the right thing to put in
-`firmware_gain_scaling`. That parameter is consumed by
-`pd_g_controller_node._commanded_torques`, which has no delay compensation of
-its own — it pairs the *current* measured `q`/`q̇` with the *most recently
-published* command, exactly the zero-lag pairing this regression's uncorrected
-form assumes. The zero-lag fit's smaller coefficient isn't a wrong answer,
-it's the answer that is self-consistent with how the live code actually
-combines its two inputs: applied to the same zero-lag pairing, the physically
-correct (delay-corrected) multiplier *overcorrects*, and was measured to make
-the momentum-observer residual on `multijoint_bag_2` (held out, free-space —
-see below) **worse**, not better (0.519 → 0.627 Nm pooled). Verified
-mechanistically: pairing the corrected multiplier with a matching 12.5 ms-delayed
-setpoint recovers to 0.543 Nm, on par with the zero-lag fit — confirming the
-gap is a magnitude/timing mismatch, not a wrong number. The delay-corrected
-multiplier would only become the right thing to ship if `_commanded_torques`
-were also changed to use a 12.5 ms-delayed setpoint against the current state;
-untried, and not measured to help even then. **Ship the zero-lag fit below.**
+- **A**, a command transport/execution delay — the firmware at time *t* is
+  still tracking the setpoint published at *t−Δ*, against its own *current*
+  encoder reading;
+- **B**, an output lag on the whole control law — both setpoint and state
+  delayed together.
+
+A wins on every joint and both bags (e.g. R² 0.99 vs 0.95 on joint2), which is
+also what the message layout implies: `q`, `q̇` and `effort` all arrive in the
+*same* `joint_states` message, so they are mutually time-consistent and only
+the command timeline can be offset.
+
+Because the delay is a real property of the arm, it is **modelled** rather than
+absorbed into the gains: `firmware_command_delay` (0.0115 s) makes
+`_commanded_torques` reconstruct against the setpoint the firmware is actually
+acting on. That is what lets `firmware_gain_scaling` below carry the arm's
+*true* multiplier. Fitting at zero lag instead yields a visibly different set
+(`kp` 22.6/22.0/18.8, `kd` 15.6/18.5/17.2 on joints 1–3) which is *not* the
+firmware's real gain — it is a value distorted to compensate for the
+unmodelled timing, valid only for the exact pairing it was fitted under, and
+not transferable to any other consumer of the number.
 
 **Effect of velocity quantization.** `q̇` from `feedback/joint_states` is
 quantized at 1e-3 rad/s (the same defect that made raw-differenced
@@ -183,17 +183,19 @@ a proxy for joint load, so that specific term (not armature/inertia/mass/COM)
 is only as good as the kinematic and inertial corrections already applied
 before it runs.
 
-| joint | zero-lag `kp` (**shipped**) | zero-lag `kd` (**shipped**) | true `kp` (delay-corrected) | true `kd` (delay-corrected) |
-|---|---|---|---|---|
-| joint1 | 22.6 ± 0.6 | 15.6 ± 0.1 | 27.7 ± 0.2 | 25.6 ± 0.4 |
-| joint2 | 22.0 ± 1.7 | 18.5 ± 0.0 | 24.1 ± 0.5 | 23.6 ± 0.7 |
-| joint3 | 18.8 ± 0.4 | 17.2 ± 0.3 | 26.6 ± 0.7 | 24.3 ± 0.1 |
-| joint4 | 1.2 ± 0.2 | 0.6 ± 0.1 | 1.6 ± 0.0 | 1.2 ± 0.1 |
-| joint5 | 1.4 ± 0.1 | 0.9 ± 0.0 | 1.6 ± 0.0 | 1.4 ± 0.1 |
-| joint6 | 1.4 ± 0.4 | 0.3 ± 0.0 | 1.7 ± 0.0 | 1.1 ± 0.1 |
+Fitted at Δ = 11.5 ms, these are the arm's true multipliers and are what
+`firmware_gain_scaling` is set to:
 
-The **zero-lag columns are what `firmware_gain_scaling` is set to**. Neither
-column is used in fitting the models — `effort` is the fit target precisely so
+| joint | `kp` multiplier | `kd` multiplier | R² |
+|---|---|---|---|
+| joint1 | 27.3 ± 0.1 | 24.6 ± 0.2 | 0.95 |
+| joint2 | 23.9 ± 0.6 | 23.2 ± 0.6 | 0.99 |
+| joint3 | 25.8 ± 0.6 | 23.7 ± 0.0 | 0.95 |
+| joint4 | 1.6 ± 0.0 | 1.2 ± 0.1 | 0.92 |
+| joint5 | 1.6 ± 0.0 | 1.4 ± 0.1 | 0.97 |
+| joint6 | 1.7 ± 0.1 | 1.0 ± 0.1 | 0.86 |
+
+Neither these nor the delay are used in fitting the models — `effort` is the fit target precisely so
 that no gain assumption enters. Joint2's value (and, to a lesser extent,
 joint1/joint3's) is only identifiable on bags with strong excitation: on the
 hold bags the feedforward term carries most of the torque and correlates with
@@ -202,20 +204,31 @@ from −1 to +24 with R² collapsing to 0.01.
 
 ### Held-out validation of the reconstruction
 
-Momentum-observer residual on `multijoint_bag_2` (held out of every fit;
-free-space, so any nonzero value is error), same model, same observer gain,
-varying only the torque fed to it:
+Momentum-observer residual, pooled RMS in Nm, on the two held-out sets
+(free-space, so any nonzero value is error), replayed through the real node
+with the shipped model, observer gain and 5 Hz residual filter — varying only
+the torque fed to the observer:
 
-| torque source | pooled RMS (Nm) |
-|---|---|
-| `commanded`, unscaled (`firmware_gain_scaling: 1.0`, the original defect) | 1.347 |
-| `commanded`, zero-lag fit (**shipped**) | 0.519 |
-| `commanded`, delay-corrected fit, zero-lag pairing (wrong combination, see above) | 0.627 |
-| `measured` | 0.583 |
+| torque source | `multijoint_bag_2` | earlier session |
+|---|---|---|
+| `commanded`, unscaled (`firmware_gain_scaling: 1.0`, the original defect) | 1.347 | — |
+| `commanded`, true gains + modelled delay (**shipped**) | **0.553** | 0.301 |
+| `commanded`, zero-lag fudge gains, delay unmodelled | 0.569 | **0.278** |
+| `measured` | 0.559 | 0.308 |
 
-The shipped `commanded` reconstruction is close to, and on this bag slightly
-better than, `measured` — consistent with `measured` carrying real stiction
-noise that a smooth PD-law reconstruction does not.
+The shipped configuration beats `measured` on both sets and beats the zero-lag
+fudge on one of the two, so modelling the delay costs nothing measurable while
+making the shipped numbers physically meaningful.
+
+One honest caveat: sweeping `firmware_command_delay` against this residual
+alone would pick ~6–9 ms rather than the measured 11.5 ms, driven almost
+entirely by joint2 (joint1 prefers ~9 ms, joint3 ~6 ms, joint2 monotonically
+prefers 0). Joint2 is also the joint with by far the largest residual model
+error, so its preference is most likely the same accidental-cancellation
+effect described above rather than evidence about the true delay — the gain
+regression measures the firmware's input/output relation directly at R²
+0.95–0.99 and is the cleaner estimator. 11.5 ms is shipped on that basis, not
+on residual minimisation.
 
 ## Results
 

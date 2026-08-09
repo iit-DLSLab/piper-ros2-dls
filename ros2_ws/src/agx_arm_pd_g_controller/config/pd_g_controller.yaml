@@ -17,13 +17,19 @@
       joint4: {kp: 10.0, kd: 0.4, feedforward_torque: 0.0}
       joint5: {kp: 10.0, kd: 0.4, feedforward_torque: 0.0}
       joint6: {kp: 10.0, kd: 0.4, feedforward_torque: 0.0}
+    # Delay between publishing a MIT command and the firmware acting on it,
+    # measured on this arm. external_torque_estimation reconstructs the
+    # firmware's tracking law against the setpoint it is actually acting on,
+    # which is what lets firmware_gain_scaling below hold the arm's true
+    # multiplier instead of one distorted to absorb the timing mismatch.
+    firmware_command_delay: 0.0115
     # Multipliers the firmware applies to gains.kp/kd, measured on this arm
     # (see models/README.md). Used only to reconstruct the commanded torque for
     # external_torque_estimation, so they have no effect while torque_source is
     # "measured".
     firmware_gain_scaling:
-      kp: [22.6, 22.0, 18.8, 1.2, 1.4, 1.4]
-      kd: [15.6, 18.5, 17.2, 0.6, 0.9, 0.3]
+      kp: [27.3, 23.9, 25.8, 1.6, 1.6, 1.7]
+      kd: [24.6, 23.2, 23.7, 1.2, 1.4, 1.0]
     gravity_compensation:
       enable: true
       # Set by the launch file, which overrides whatever is written here:

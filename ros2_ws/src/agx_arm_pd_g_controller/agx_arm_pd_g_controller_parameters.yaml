@@ -38,17 +38,23 @@ pd_g_controller:
         type: double
         default_value: 0.0
         description: "MIT-mode feed-forward torque added for this joint (on top of gravity compensation, if enabled)."
+  firmware_command_delay:
+    type: double
+    default_value: 0.0
+    description: "Delay [s] between publishing a MIT command and the firmware acting on it. Used only by external_torque_estimation, which reconstructs the firmware's tracking law against the setpoint it is actually acting on rather than the newest one. Measured on piper_l at 0.0115 s, consistently across five joints and two recordings; the shipped config sets it. Leaving it at 0 does not remove the delay, it only hides it - the fitted firmware_gain_scaling then has to absorb the mismatch and stops being the arm's true multiplier."
+    validation:
+      bounds<>: [0.0, 0.5]
   firmware_gain_scaling:
     kp:
       type: double_array
       default_value: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
-      description: "Per-joint correction multiplier for gains.kp, applied only when reconstructing the commanded torque for external_torque_estimation (a mismatch there gets misread as external torque). The firmware applies its own multiplier: measured on piper_l as [22.6, 22.0, 18.8, 1.2, 1.4, 1.4], which the shipped config sets. Default 1.0 here because the value is firmware- and arm-specific. external_torque_estimation.torque_source: measured avoids the question entirely."
+      description: "Per-joint correction multiplier for gains.kp, applied only when reconstructing the commanded torque for external_torque_estimation (a mismatch there gets misread as external torque). The firmware applies its own multiplier: measured on piper_l as [27.3, 23.9, 25.8, 1.6, 1.6, 1.7], which the shipped config sets. Default 1.0 here because the value is firmware- and arm-specific. external_torque_estimation.torque_source: measured avoids the question entirely."
       validation:
         lower_element_bounds<>: [0.0]
     kd:
       type: double_array
       default_value: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
-      description: "Per-joint correction multiplier for gains.kd, applied only when reconstructing the commanded torque for external_torque_estimation (a mismatch there gets misread as external torque). The firmware applies its own multiplier: measured on piper_l as [15.6, 18.5, 17.2, 0.6, 0.9, 0.3], which the shipped config sets. Default 1.0 here because the value is firmware- and arm-specific. external_torque_estimation.torque_source: measured avoids the question entirely."
+      description: "Per-joint correction multiplier for gains.kd, applied only when reconstructing the commanded torque for external_torque_estimation (a mismatch there gets misread as external torque). The firmware applies its own multiplier: measured on piper_l as [24.6, 23.2, 23.7, 1.2, 1.4, 1.0], which the shipped config sets. Default 1.0 here because the value is firmware- and arm-specific. external_torque_estimation.torque_source: measured avoids the question entirely."
       validation:
         lower_element_bounds<>: [0.0]
   gravity_compensation:
