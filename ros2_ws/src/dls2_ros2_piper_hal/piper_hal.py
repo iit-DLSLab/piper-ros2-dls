@@ -136,8 +136,6 @@ class PiperHALNode(Node):
         blind_state_msg.joints_acceleration = joints_acceleration.tolist()
         blind_state_msg.joints_effort = joints_effort.tolist()
         blind_state_msg.joints_temperature = joints_temperature.tolist()
-        blind_state_msg.feet_contact = []
-        blind_state_msg.current_feet_positions = []
 
         self.publisher_blind_state.publish(blind_state_msg)
         self.arm_state_sequence_id += 1
