@@ -11,9 +11,8 @@ find_package(ament_cmake REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
-  "msg/ArmState.msg"
-  "msg/ArmTrajectoryGenerator.msg"
-  "msg/ArmControlSignal.msg"
+  "msg/BlindState.msg"
+  "msg/ControlSignal.msg"
 )
 
 ament_export_dependencies(rosidl_default_runtime)
