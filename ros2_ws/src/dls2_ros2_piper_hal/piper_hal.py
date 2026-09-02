@@ -1,6 +1,6 @@
 import rclpy
 from rclpy.node import Node
-from dls2_interface.msg import ArmState, ArmTrajectoryGenerator, ArmControlSignal
+from dls2_interface.msg import BlindState, ControlSignal
 
 import numpy as np
 import time
@@ -8,8 +8,8 @@ import time
 from pyAgxArm import AgxArmFactory, ArmModel, create_agx_arm_config
 
 
-PIPER_SCALE_KP = [30.0, 30.0, 30.0, 1.0, 1.0, 1.0]
-PIPER_SCALE_KD = [25.0, 25.0, 25.0, 1.0, 1.0, 1.0]
+PIPER_SCALE_KP = [25.0, 25.0, 25.0, 1.5, 1.5, 1.5]
+PIPER_SCALE_KD = [25.0, 25.0, 25.0, 1.5, 1.5, 1.5]
 
 class PiperHALNode(Node):
     def __init__(self):
@@ -20,21 +20,15 @@ class PiperHALNode(Node):
 
         arm_state_freq = 300  # Hz
         self.timer = self.create_timer(1/arm_state_freq, self.compute_piper_hal_callback)
-        self.publisher_arm_blind_state = self.create_publisher(ArmState, "/arm_state", 1)
-        self.subscriber_trajectory_generator_arm = self.create_subscription(
-            ArmTrajectoryGenerator, "/arm_trajectory_generator", self.get_arm_trajectory_generator_callback, 1)
-        self.subscriber_arm_control_signal = self.create_subscription(
-            ArmControlSignal, "/arm_control_signal", self.get_arm_control_signal_callback, 1)
-
-        # Initialize control signal variables
-        self.desired_arm_joints_torque = np.zeros(6)
-        self.desired_gripper_torque = 0.0
+        self.publisher_blind_state = self.create_publisher(BlindState, "/blind_state_arm", 1)
+        self.subscriber_control_signal = self.create_subscription(
+            ControlSignal, "/control_signal_arm", self.get_control_signal_callback, 1)
 
         # Initialize state variables
         self.arm_state_sequence_id = 0
-        self.arm_joints_name = [f"joint_{i}" for i in range(1, 7)]
+        self.joints_name = [f"joint_{i}" for i in range(1, 7)] + ["gripper"]
         self.previous_arm_state_timestamp = None
-        self.previous_arm_joints_velocity = np.zeros(6)
+        self.previous_joints_velocity = np.zeros(7)
         self.previous_gripper_position = 0.0
         self.current_gripper_position = 0.0
         self.current_gripper_effort = 0.0
@@ -56,34 +50,29 @@ class PiperHALNode(Node):
         self.get_logger().info("Piper enabled.")
 
 
-    def get_arm_trajectory_generator_callback(self, msg):
-        desired_arm_joints_position = np.array(msg.desired_arm_joints_position)
-        desired_arm_joints_velocity = np.array(msg.desired_arm_joints_velocity)
-
-        kp = np.array(msg.arm_kp)
-        kd = np.array(msg.arm_kd)
+    def get_control_signal_callback(self, msg):
+        desired_joints_position = np.array(msg.joints_position)
+        desired_joints_velocity = np.array(msg.joints_velocity)
+        desired_joints_torque = np.array(msg.joints_torques)
+        kp = np.array(msg.kp)
+        kd = np.array(msg.kd)
 
         # Arm control
         for i in range(6):
             self.piper.move_mit(
                 i + 1,
-                p_des=desired_arm_joints_position[i],
-                v_des=desired_arm_joints_velocity[i],
+                p_des=desired_joints_position[i],
+                v_des=desired_joints_velocity[i],
                 kp=kp[i] / PIPER_SCALE_KP[i],
                 kd=kd[i] / PIPER_SCALE_KD[i],
-                t_ff=self.desired_arm_joints_torque[i],
+                t_ff=desired_joints_torque[i],
             )
 
         # Gripper control
         self.gripper.move_gripper_m(
-            value=float(msg.desired_arm_gripper_position),
-            force=max(0.0, float(self.desired_gripper_torque)),
+            value=float(desired_joints_position[6]),
+            force=max(0.0, float(desired_joints_torque[6])),
         )
-
-
-    def get_arm_control_signal_callback(self, msg):
-        self.desired_arm_joints_torque = np.array(msg.desired_arm_joints_torque)
-        self.desired_gripper_torque = msg.desired_arm_gripper_torque
 
 
     def compute_piper_hal_callback(self):
@@ -94,19 +83,19 @@ class PiperHALNode(Node):
 
         driver_states = [self.piper.get_driver_states(i) for i in range(1, 7)]
 
-        joints_position = np.array(
+        arm_joints_position = np.array(
             [motor_state.msg.position for motor_state in motor_states],
             dtype=float,
         )
-        joints_velocity = np.array(
+        arm_joints_velocity = np.array(
             [motor_state.msg.velocity for motor_state in motor_states],
             dtype=float,
         )
-        joints_effort = np.array(
+        arm_joints_effort = np.array(
             [motor_state.msg.torque for motor_state in motor_states],
             dtype=float,
         )
-        joints_temperature = np.array(
+        arm_joints_temperature = np.array(
             [
                 driver_state.msg.motor_temp if driver_state is not None else 0.0
                 for driver_state in driver_states
@@ -122,33 +111,36 @@ class PiperHALNode(Node):
         gripper_position = self.current_gripper_position
         gripper_effort = self.current_gripper_effort
 
-        joints_acceleration = np.zeros(6)
+        joints_position = np.append(arm_joints_position, gripper_position)
+        joints_effort = np.append(arm_joints_effort, gripper_effort)
+        joints_temperature = np.append(arm_joints_temperature, 0.0)
+
         gripper_velocity = 0.0
+        joints_velocity = np.append(arm_joints_velocity, gripper_velocity)
+        joints_acceleration = np.zeros(7)
         if self.previous_arm_state_timestamp is not None:
             dt = timestamp - self.previous_arm_state_timestamp
             if dt > 0.0:
-                joints_acceleration = (joints_velocity - self.previous_arm_joints_velocity) / dt
                 gripper_velocity = (gripper_position - self.previous_gripper_position) / dt
+                joints_velocity = np.append(arm_joints_velocity, gripper_velocity)
+                joints_acceleration = (joints_velocity - self.previous_joints_velocity) / dt
 
-        arm_state_msg = ArmState()
-        arm_state_msg.frame_id = "base_link"
-        arm_state_msg.sequence_id = self.arm_state_sequence_id
-        arm_state_msg.timestamp = timestamp
-        arm_state_msg.robot_name = "piper"
-        arm_state_msg.joints_name = self.arm_joints_name
-        arm_state_msg.joints_position = joints_position.tolist()
-        arm_state_msg.joints_velocity = joints_velocity.tolist()
-        arm_state_msg.joints_acceleration = joints_acceleration.tolist()
-        arm_state_msg.joints_effort = joints_effort.tolist()
-        arm_state_msg.joints_temperature = joints_temperature.tolist()
-        arm_state_msg.gripper_position = float(gripper_position)
-        arm_state_msg.gripper_velocity = float(gripper_velocity)
-        arm_state_msg.gripper_effort = float(gripper_effort)
+        blind_state_msg = BlindState()
+        blind_state_msg.frame_id = "base_link"
+        blind_state_msg.sequence_id = self.arm_state_sequence_id
+        blind_state_msg.timestamp = timestamp
+        blind_state_msg.robot_name = "piper"
+        blind_state_msg.joints_name = self.joints_name
+        blind_state_msg.joints_position = joints_position.tolist()
+        blind_state_msg.joints_velocity = joints_velocity.tolist()
+        blind_state_msg.joints_acceleration = joints_acceleration.tolist()
+        blind_state_msg.joints_effort = joints_effort.tolist()
+        blind_state_msg.joints_temperature = joints_temperature.tolist()
 
-        self.publisher_arm_blind_state.publish(arm_state_msg)
+        self.publisher_blind_state.publish(blind_state_msg)
         self.arm_state_sequence_id += 1
         self.previous_arm_state_timestamp = timestamp
-        self.previous_arm_joints_velocity = joints_velocity
+        self.previous_joints_velocity = joints_velocity
         self.previous_gripper_position = gripper_position
 
     def destroy_node(self):
@@ -158,7 +150,7 @@ class PiperHALNode(Node):
 
 def main(args=None):
     print('Hello from the Piper hal node.')
-    
+
     rclpy.init(args=args)
     piper_hal_node = PiperHALNode()
     try:
@@ -168,7 +160,7 @@ def main(args=None):
     finally:
         piper_hal_node.destroy_node()
         rclpy.shutdown()
-    
+
     print("Piper hal node is stopped")
 
 
