@@ -1,0 +1,81 @@
+{
+  "eps": 0.05,
+  "baked_into_xml": true,
+  "note": "f = P*(visc_pos*qd + coul_pos*s + load_pos*|tau|*s) + N*(same _neg), s=tanh(qd/eps), P=(1+s)/2, N=(1-s)/2; tau is the model's own predicted joint torque. This is the torque the actuator must ADD to overcome friction. If baked_into_xml is true the direction-averaged part is ALREADY in the model's damping/frictionloss - do not apply this on top of it.",
+  "joints": {
+    "joint1": {
+      "visc_pos": 0.3715278634890881,
+      "coul_pos": 0.2812322559112362,
+      "load_pos": 0.038396854565119924,
+      "visc_neg": 0.3812717037838606,
+      "coul_neg": 0.33852455112570434,
+      "load_neg": 0.05203961339548524
+    },
+    "joint2": {
+      "visc_pos": 0.01701811228143393,
+      "coul_pos": 0.013800712669986642,
+      "load_pos": 0.06259290816113289,
+      "visc_neg": 0.02984957238724712,
+      "coul_neg": 0.02139068956555071,
+      "load_neg": 0.0379815838558583
+    },
+    "joint3": {
+      "visc_pos": 0.11747827778659274,
+      "coul_pos": 0.03474356720452913,
+      "load_pos": 0.1151469005471239,
+      "visc_neg": 0.1964245481839427,
+      "coul_neg": 0.099531291260131,
+      "load_neg": 0.06925251785781636
+    },
+    "joint4": {
+      "visc_pos": 0.052248378613262016,
+      "coul_pos": 0.06170633521458318,
+      "load_pos": 0.008829046389517491,
+      "visc_neg": 0.06737863641726757,
+      "coul_neg": 0.0759618683606053,
+      "load_neg": 0.014052800430747216
+    },
+    "joint5": {
+      "visc_pos": 0.05095699297284747,
+      "coul_pos": 0.06348642408102464,
+      "load_pos": 0.002860113982249068,
+      "visc_neg": 0.05543799203426689,
+      "coul_neg": 0.05473187680511974,
+      "load_neg": 0.026046563139424966
+    },
+    "joint6": {
+      "visc_pos": 0.02698208833190481,
+      "coul_pos": 0.11214931615635229,
+      "load_pos": 0.0,
+      "visc_neg": 0.03243669708874996,
+      "coul_neg": 0.09596034026408158,
+      "load_neg": 0.0007989466687678982
+    }
+  },
+  "mujoco_symmetric_equivalent": {
+    "joint1": {
+      "damping": 0.37639978363647436,
+      "frictionloss": 0.3098784035184703
+    },
+    "joint2": {
+      "damping": 0.023433842334340524,
+      "frictionloss": 0.017595701117768675
+    },
+    "joint3": {
+      "damping": 0.1569514129852677,
+      "frictionloss": 0.06713742923233007
+    },
+    "joint4": {
+      "damping": 0.05981350751526479,
+      "frictionloss": 0.06883410178759423
+    },
+    "joint5": {
+      "damping": 0.05319749250355718,
+      "frictionloss": 0.05910915044307219
+    },
+    "joint6": {
+      "damping": 0.029709392710327385,
+      "frictionloss": 0.10405482821021694
+    }
+  }
+}

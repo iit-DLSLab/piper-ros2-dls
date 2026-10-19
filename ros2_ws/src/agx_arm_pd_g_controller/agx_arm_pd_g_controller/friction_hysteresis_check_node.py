@@ -25,7 +25,7 @@ from agx_arm_msgs.msg import MoveMITMsg
 JOINT_NAMES = ["joint1", "joint2", "joint3", "joint4", "joint5", "joint6"]
 BASE_CONFIG = np.array([0.0, 0.4, -0.7, 0.0, 0.23, 0.22])
 
-# Stiff MIT gains for a static hold (stiffer than the gravity-calibration
+# Stiff MIT gains for a static hold (stiffer than the teleoperation
 # defaults of [5, 5, 5, 5.6, 20, 6] / [0.8]*6).
 KP = [20.0, 20.0, 20.0, 20.0, 30.0, 20.0]
 KD = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]

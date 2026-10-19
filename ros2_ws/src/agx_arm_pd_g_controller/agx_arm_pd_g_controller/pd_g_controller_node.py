@@ -1,3 +1,5 @@
+from collections import deque
+
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import JointState
@@ -45,16 +47,11 @@ class PdGControllerNode(Node):
             self.gravity_model = GravityCompensationModel(
                 model_path=self.params.gravity_compensation.model_path,
                 joint_names=self.params.joints,
-                calibration_path=self.params.gravity_compensation.calibration_path or None,
                 torque_scaling=self.params.gravity_compensation.torque_scaling,
             )
             self.get_logger().info(
                 f"Gravity model loaded from '{self.params.gravity_compensation.model_path}' "
-                + (
-                    f"with calibration '{self.params.gravity_compensation.calibration_path}'"
-                    if self.gravity_model.calibrated
-                    else f"with direct torque scaling {list(self.params.gravity_compensation.torque_scaling)}"
-                )
+                f"with torque scaling {list(self.params.gravity_compensation.torque_scaling)}"
             )
 
         self.measured_positions = {}
@@ -66,9 +63,18 @@ class PdGControllerNode(Node):
         # law is contributing to measured_efforts, so external torque estimation can
         # subtract it out instead of misreading it as contact force.
         self.last_command = {}
+        # Timestamped ring of recent commands per joint, so the external torque
+        # estimate can reconstruct the setpoint the firmware is currently acting
+        # on rather than the newest one (see _delayed_command). Sized to cover
+        # the configured delay with margin at the control rate.
+        self.command_history = {}
+        self._command_history_len = max(
+            4, int(self.params.firmware_command_delay * self.params.control_rate) + 3
+        )
 
         self.external_torque_publisher = None
         self.momentum_observer = None
+        self.residual_filter = None
         if self.params.external_torque_estimation.enable:
             if self.gravity_model is None:
                 raise RuntimeError(
@@ -96,6 +102,20 @@ class PdGControllerNode(Node):
                     qpos_indices=momentum_observer_model.qpos_indices,
                     qvel_indices=momentum_observer_model.qvel_indices,
                     gain=self.params.external_torque_estimation.momentum_observer_gain,
+                )
+            if self.params.external_torque_estimation.residual_filter_hz > 0.0:
+                from agx_arm_pd_g_controller.residual_filter import LowPassFilter
+
+                cutoff = self.params.external_torque_estimation.residual_filter_hz
+                self.residual_filter = LowPassFilter(
+                    cutoff_hz=cutoff,
+                    sample_rate_hz=self.params.control_rate,
+                    n_channels=len(self.params.joints),
+                )
+                self.get_logger().info(
+                    f"External torque estimate low-passed at {cutoff:.1f} Hz "
+                    f"(gain {self.residual_filter.gain_at(15.5):.3f} at 15.5 Hz, "
+                    f"{self.residual_filter.gain_at(1.0):.3f} at 1 Hz)"
                 )
             self.external_torque_publisher = self.create_publisher(
                 JointState, self.params.external_torque_estimation.output_topic, 1
@@ -135,24 +155,76 @@ class PdGControllerNode(Node):
             for name, effort in zip(msg.name, msg.effort):
                 self.measured_efforts[name] = effort
 
+    def _delayed_command(self, name, now):
+        """The MIT command the firmware is actually acting on right now.
+
+        Commands take firmware_command_delay to reach the motor, so at wall time
+        `now` the firmware is still tracking the setpoint published
+        `firmware_command_delay` ago - while using its own *current* encoder
+        reading. Reconstructing with the newest setpoint instead pairs a command
+        with a state it never saw, which the fit sees as an apparent gain error;
+        modelling the delay here is what lets firmware_gain_scaling hold the
+        arm's true multiplier rather than one distorted to absorb the mismatch.
+
+        Linearly interpolates between the two commands bracketing the target
+        time, since the delay is not an integer number of control periods.
+        """
+        history = self.command_history.get(name)
+        if not history:
+            return None
+        target = now - self.params.firmware_command_delay
+        if target <= history[0][0]:
+            return history[0][1]
+        if target >= history[-1][0]:
+            return history[-1][1]
+        # Walk back to the newest entry at or before the target, so the target
+        # is bracketed by [k, k+1]. Stopping at the newest pair instead would
+        # extrapolate backwards from it, which amplifies command noise rather
+        # than interpolating.
+        for k in range(len(history) - 2, -1, -1):
+            t0, older = history[k]
+            if t0 > target:
+                continue
+            t1, newer = history[k + 1]
+            if t1 <= t0:
+                return newer
+            alpha = (target - t0) / (t1 - t0)
+            return {
+                # kp/kd are configuration, not a trajectory - do not interpolate
+                "kp": newer["kp"],
+                "kd": newer["kd"],
+                "p_des": older["p_des"] + alpha * (newer["p_des"] - older["p_des"]),
+                "v_des": older["v_des"] + alpha * (newer["v_des"] - older["v_des"]),
+                "torque": older["torque"] + alpha * (newer["torque"] - older["torque"]),
+            }
+        return history[0][1]
+
     def _commanded_torques(self, qpos, qvel):
         """Best available reconstruction of the total actuator torque, per joint.
 
-        Uses the last MIT command actually sent (kp*(p_des-p)+kd*(v_des-v)+t_ff,
-        the firmware's own tracking law) so it isn't misread as external torque.
-        Falls back to gravity alone before the first command has been sent for
-        a joint (e.g. before the first setpoint, or during move_j-based homing).
+        Evaluates the firmware's own tracking law (kp*(p_des-p)+kd*(v_des-v)+t_ff)
+        so the arm's own tracking effort isn't misread as external torque, using
+        the setpoint the firmware is actually acting on (see _delayed_command)
+        against the current measured state. gains.kp/kd are scaled by
+        firmware_gain_scaling first, since the firmware applies its own internal
+        multiplier to them. Falls back to gravity alone before the first command
+        has been sent for a joint (e.g. before the first setpoint, or during
+        move_j-based homing).
         """
         gravity = self.gravity_model.raw_gravity_torque(qpos)
+        now = self.get_clock().now().nanoseconds * 1e-9
         commanded = []
         for i, name in enumerate(self.params.joints):
-            command = self.last_command.get(name)
+            command = self._delayed_command(name, now)
             if command is None:
                 commanded.append(gravity[i])
             else:
+                scale = self.joint_list_index[name]
+                kp = command["kp"] * self.params.firmware_gain_scaling.kp[scale]
+                kd = command["kd"] * self.params.firmware_gain_scaling.kd[scale]
                 commanded.append(
-                    command["kp"] * (command["p_des"] - qpos[i])
-                    + command["kd"] * (command["v_des"] - qvel[i])
+                    kp * (command["p_des"] - qpos[i])
+                    + kd * (command["v_des"] - qvel[i])
                     + command["torque"]
                 )
         return commanded
@@ -170,7 +242,9 @@ class PdGControllerNode(Node):
         arm's own motion. With method 'momentum_observer', the same commanded
         torque instead drives a De Luca generalized-momentum residual filter
         (see momentum_observer.py) that correctly separates inertial/Coriolis
-        torque from external torque using MuJoCo's mass matrix and bias force.
+        torque from external torque using MuJoCo's mass matrix and bias force -
+        fed either that reconstruction or measured_effort itself, per
+        external_torque_estimation.torque_source.
         """
         try:
             qpos = [self.measured_positions[name] for name in self.params.joints]
@@ -182,9 +256,20 @@ class PdGControllerNode(Node):
         commanded = self._commanded_torques(qpos, qvel)
 
         if self.momentum_observer is not None:
+            # The observer wants the torque the actuator actually applied. The
+            # reconstruction is only a proxy for it, and a poor one on joints
+            # 1-3: the firmware applies its own multiplier to kp/kd (~25x, see
+            # models/README.md), so with
+            # firmware_gain_scaling at 1.0 the reconstruction understates them
+            # badly. 'measured' sidesteps the whole question.
+            torque = (
+                measured
+                if self.params.external_torque_estimation.torque_source == "measured"
+                else commanded
+            )
             return list(
                 self.momentum_observer.update(
-                    qpos, qvel, commanded, 1.0 / self.params.control_rate
+                    qpos, qvel, torque, 1.0 / self.params.control_rate
                 )
             )
 
@@ -194,6 +279,11 @@ class PdGControllerNode(Node):
         tau_ext = self._external_torques()
         if tau_ext is None:
             return
+        if self.residual_filter is not None:
+            # Filter here rather than inside the observer: this way both
+            # estimation methods get it, and the observer's own residual stays
+            # untouched for anyone reading it directly.
+            tau_ext = list(self.residual_filter(tau_ext))
         msg = JointState()
         msg.name = list(self.params.joints)
         msg.position = [self.measured_positions[name] for name in self.params.joints]
@@ -241,6 +331,7 @@ class PdGControllerNode(Node):
 
         has_velocity = len(msg.velocity) == len(msg.name)
         has_effort = len(msg.effort) == len(msg.name)
+        now = self.get_clock().now().nanoseconds * 1e-9
 
         out = MoveMITMsg()
         for i, name in enumerate(msg.name):
@@ -268,13 +359,16 @@ class PdGControllerNode(Node):
             out.kd.append(gains.kd)
             out.torque.append(torque)
 
-            self.last_command[name] = {
+            command = {
                 "p_des": p_des,
                 "v_des": v_des,
                 "kp": gains.kp,
                 "kd": gains.kd,
                 "torque": torque,
             }
+            self.last_command[name] = command
+            history = self.command_history.setdefault(name, deque(maxlen=self._command_history_len))
+            history.append((now, command))
 
         if not out.joint_index:
             return

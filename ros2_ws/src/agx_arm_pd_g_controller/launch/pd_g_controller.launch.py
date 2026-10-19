@@ -8,7 +8,14 @@ from launch_ros.actions import Node
 
 
 def resolve_model_path(context) -> str:
-    """Model file precedence: explicit model_file arg > robot_model/use_gripper.
+    """Model precedence: explicit model_file arg > identified MJCF > description.
+
+    An identified model shipped in this package's models/ directory is
+    preferred over agx_arm_description's stock model, because it carries the
+    corrected kinematics, measured masses and fitted friction that gravity
+    compensation and the momentum observer both depend on (see
+    models/README.md). The no-spacer variant is the default; pass model_file:=
+    explicitly to select the with-spacer one or bypass both.
 
     agx_arm_description lays models out as
     agx_arm_urdf/<robot_model>/urdf/<robot_model>_description.urdf and
@@ -20,6 +27,14 @@ def resolve_model_path(context) -> str:
         return model_file
 
     robot_model = context.launch_configurations['robot_model']
+    models = os.path.join(
+        get_package_share_directory('agx_arm_pd_g_controller'), 'models')
+    for candidate in (f'{robot_model}_identified_no_spacer.xml',
+                      f'{robot_model}_identified.xml'):
+        path = os.path.join(models, candidate)
+        if os.path.exists(path):
+            return path
+
     use_gripper = context.launch_configurations['use_gripper'].lower() in ('true', '1')
     filename = (
         f'{robot_model}_with_gripper_description.xacro'
@@ -46,8 +61,6 @@ def launch_setup(context):
                     context.launch_configurations['enable_gravity_compensation'].lower()
                     in ('true', '1'),
                 'gravity_compensation.model_path': resolve_model_path(context),
-                'gravity_compensation.calibration_path':
-                    context.launch_configurations['calibration_file'],
             },
         ],
     )
@@ -93,12 +106,6 @@ def generate_launch_description():
             'enable_gravity_compensation',
             default_value='false',
             description='Enable MuJoCo-based gravity compensation.',
-        ),
-        DeclareLaunchArgument(
-            'calibration_file',
-            default_value='',
-            description='Gravity calibration YAML produced by gravity_calibration.launch.py. '
-                        'Empty: use the torque_scaling parameter instead.',
         ),
         OpaqueFunction(function=launch_setup),
     ])
