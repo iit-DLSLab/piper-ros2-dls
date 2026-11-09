@@ -1,4 +1,4 @@
 __pycache__/
 build/
 install/
-log/
+log/.pixi/
