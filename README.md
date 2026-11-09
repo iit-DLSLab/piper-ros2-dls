@@ -21,7 +21,7 @@ This workspace contains the following packages:
 
 ## Installation
 
-You can follow a readme based on conda [here](./README_conda.md) or rosdep [here](./README_rosdep.md) 
+You can follow a readme based on pixi [here](./README_pixi.md) or rosdep [here](./README_rosdep.md) 
 
 ## ROS2-DLS HAL (with custom messages)
 

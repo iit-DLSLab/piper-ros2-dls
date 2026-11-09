@@ -76,7 +76,8 @@ class PiperHALNode(Node):
 
 
     def compute_piper_hal_callback(self):
-        timestamp = self.get_clock().now().nanoseconds * 1e-9
+        timestamp_ns = self.get_clock().now().nanoseconds
+        timestamp = timestamp_ns * 1e-9
         motor_states = [self.piper.get_motor_states(i) for i in range(1, 7)]
         if any(motor_state is None for motor_state in motor_states):
             return
@@ -126,9 +127,9 @@ class PiperHALNode(Node):
                 joints_acceleration = (joints_velocity - self.previous_joints_velocity) / dt
 
         blind_state_msg = BlindState()
-        blind_state_msg.frame_id = "base_link"
-        blind_state_msg.sequence_id = self.arm_state_sequence_id
-        blind_state_msg.timestamp = timestamp
+        blind_state_msg.header.frame_id = "base_link"
+        blind_state_msg.header.sequence_id = self.arm_state_sequence_id
+        blind_state_msg.header.timestamp = timestamp_ns
         blind_state_msg.robot_name = "piper"
         blind_state_msg.joints_name = self.joints_name
         blind_state_msg.joints_position = joints_position.tolist()
